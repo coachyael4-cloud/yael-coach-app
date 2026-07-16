@@ -11,6 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -478,7 +479,11 @@ tailwind.config = {
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 9l5-5 5 5M12 4v12"/></svg>
         Importer sauvegarde
       </button>
-      <p class="px-1 pt-1 text-[.65rem]" style="color:#9aa397">Sauvegarde auto · <span class="num">localStorage</span></p>
+      <button id="btnCloudSync" class="btn btn-ghost w-full justify-start text-[.82rem]">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 18a4 4 0 0 1-1-7.87A5.5 5.5 0 0 1 16.5 7.5H17a4 4 0 0 1 1 7.87M12 12v6m0-6-2.5 2.5M12 12l2.5 2.5"/></svg>
+        <span id="cloudSyncLabel">Synchro cloud</span>
+      </button>
+      <p class="px-1 pt-1 text-[.65rem]" style="color:#9aa397">Sauvegarde auto · <span class="num">localStorage</span><span id="cloudSyncStatus"></span></p>
       <p class="px-1 text-[.65rem]" style="color:#c4cdc2">Version <span class="num">4.0</span> · build 2026-07-12</p>
     </div>
   </aside>
@@ -1649,6 +1654,30 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
   </div>
 </div>
 
+<!-- ===== MODALE SYNCHRO CLOUD ===== -->
+<div id="modalCloudSync" class="modal-back">
+  <div class="modal-card" style="max-width:480px;">
+    <div class="px-6 py-5 border-b border-line flex items-center justify-between">
+      <h3 class="font-display text-lg">Synchronisation cloud</h3>
+      <button data-close class="text-[#aab2a6] hover:text-ink text-xl">✕</button>
+    </div>
+    <div class="px-6 py-5">
+      <p class="text-sm mb-4" style="color:#5b6b60">
+        Choisis un code de synchro personnel (garde-le précieusement : c'est lui qui relie tes appareils entre eux).
+        Utilise le même code sur ton PC, ton portable et ton téléphone pour retrouver les mêmes données partout.
+      </p>
+      <label class="fld-lbl">Code de synchro</label>
+      <input id="cloudSyncKeyInput" type="text" class="fld w-full mb-3" placeholder="Ex: yael-coach-2026-xyz" autocomplete="off">
+      <div class="flex gap-2 mb-4">
+        <button id="btnCloudConnect" class="btn btn-primary flex-1">Connecter</button>
+        <button id="btnCloudSyncNow" class="btn btn-ghost">Synchroniser maintenant</button>
+      </div>
+      <div id="cloudSyncInfo" class="text-xs rounded-lg p-3" style="background:#f6f7f5;border:1px solid var(--line);color:#5b6b60;"></div>
+      <button id="btnCloudDisconnect" class="text-xs mt-3 hidden" style="color:#b45252;">Se déconnecter de ce compte cloud sur cet appareil</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODALE EXPORT ============ -->
 <div id="modalExport" class="modal-back">
   <div class="modal-card">
@@ -1852,6 +1881,124 @@ function closeSidebar(){
 
 const SCHEMA_VERSION = 4;              // version courante du schéma de données
 const LS_KEY = "nutripilot_db_v1";     // clé localStorage (stable)
+
+/* =========================================================
+   1bis. SYNCHRO CLOUD (Supabase) — optionnelle
+   -----------------------------------------------------------
+   Permet de retrouver les mêmes données sur plusieurs appareils.
+   Fonctionne uniquement si un "code de synchro" a été renseigné
+   par le coach (voir modale #modalCloudSync). Sans ce code, l'app
+   fonctionne exactement comme avant, en localStorage pur.
+   ========================================================= */
+const SUPA_URL = "https://yqaesbtowugsadytpgtj.supabase.co";
+const SUPA_KEY = "sb_publishable_NzMGFn5aCC49SvhS8ZhfNw_FlUE1m0G";
+const LS_SYNCKEY = "nutripilot_sync_key"; // clé localStorage qui stocke le code de synchro choisi par le coach
+
+let supaClient = null;
+try{
+  if (window.supabase && SUPA_URL && SUPA_KEY) {
+    supaClient = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+  }
+}catch(e){ console.warn("Supabase non initialisé :", e); }
+
+function getSyncKey(){
+  try{ return localStorage.getItem(LS_SYNCKEY) || ""; }catch(e){ return ""; }
+}
+function setSyncKey(key){
+  try{
+    if(key) localStorage.setItem(LS_SYNCKEY, key);
+    else localStorage.removeItem(LS_SYNCKEY);
+  }catch(e){}
+}
+function cloudEnabled(){ return !!(supaClient && getSyncKey()); }
+
+// Envoie la DB actuelle vers le cloud (upsert sur la clé de synchro)
+async function cloudPush(){
+  const key = getSyncKey();
+  if(!supaClient || !key) return { ok:false, reason:"disabled" };
+  try{
+    const { error } = await supaClient
+      .from("nutripilot_backup")
+      .upsert({ sync_key:key, payload:DB, updated_at:new Date().toISOString() }, { onConflict:"sync_key" });
+    if(error) throw error;
+    return { ok:true };
+  }catch(e){
+    console.warn("cloudPush échoué :", e);
+    return { ok:false, reason:e.message||String(e) };
+  }
+}
+
+// Récupère la DB depuis le cloud pour ce code de synchro (null si rien trouvé)
+async function cloudPull(key){
+  if(!supaClient || !key) return { ok:false, reason:"disabled" };
+  try{
+    const { data, error } = await supaClient
+      .from("nutripilot_backup")
+      .select("payload, updated_at")
+      .eq("sync_key", key)
+      .maybeSingle();
+    if(error) throw error;
+    if(!data) return { ok:true, payload:null };
+    return { ok:true, payload:data.payload, updatedAt:data.updated_at };
+  }catch(e){
+    console.warn("cloudPull échoué :", e);
+    return { ok:false, reason:e.message||String(e) };
+  }
+}
+
+// Débounce : évite de spammer Supabase à chaque frappe/modif (regroupe les sauvegardes rapprochées)
+let _cloudPushTimer = null;
+function scheduleCloudPush(){
+  if(!cloudEnabled()) return;
+  clearTimeout(_cloudPushTimer);
+  _cloudPushTimer = setTimeout(()=>{ cloudPush().then(updateCloudStatusUI); }, 1500);
+}
+
+// Au démarrage : compare la version locale et la version cloud, garde la plus récente des deux
+async function cloudSyncOnBoot(){
+  const key = getSyncKey();
+  if(!supaClient || !key) return;
+  updateCloudStatusUI({ok:true, syncing:true});
+  const res = await cloudPull(key);
+  if(!res.ok){ updateCloudStatusUI(res); return; }
+  if(res.payload){
+    const cloudTime = new Date(res.updatedAt||0).getTime();
+    const localTime = (DB && DB.meta && DB.meta.updatedAt) || 0;
+    if(cloudTime > localTime){
+      // Le cloud est plus récent (modifs faites sur un autre appareil) → on l'adopte
+      DB = migrate(res.payload);
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }catch(e){}
+      syncAllAges();
+      renderAll();
+      toast("☁️ Données restaurées depuis le cloud");
+    } else if(localTime > cloudTime){
+      // La version locale est plus récente → on la pousse pour mettre le cloud à jour
+      await cloudPush();
+    }
+  } else {
+    // Rien dans le cloud pour ce code : on y pousse notre DB locale actuelle
+    await cloudPush();
+  }
+  updateCloudStatusUI({ok:true});
+}
+
+function updateCloudStatusUI(res){
+  const statusEl = document.getElementById("cloudSyncStatus");
+  const labelEl  = document.getElementById("cloudSyncLabel");
+  const key = getSyncKey();
+  if(!key){
+    if(statusEl) statusEl.textContent = "";
+    if(labelEl) labelEl.textContent = "Synchro cloud";
+    return;
+  }
+  if(labelEl) labelEl.textContent = "Synchro cloud ✓";
+  if(statusEl){
+    if(res && res.syncing) statusEl.textContent = " · synchro en cours…";
+    else if(res && res.ok===false) statusEl.textContent = " · ⚠ synchro cloud échouée";
+    else statusEl.textContent = " · ☁️ synchronisé";
+  }
+}
+
 const DAYS = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 /* Noms complets des jours — utilisés uniquement dans les exports PDF
    (programme semaine, batch/foyer, journée type), à la demande du coach.
@@ -2985,6 +3132,7 @@ function save(){
   DB.meta.updatedAt = Date.now();
   try{ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
   catch(e){ toast("Erreur de sauvegarde locale"); }
+  scheduleCloudPush();
 }
 function toast(msg){
   const t=document.getElementById("toast");
@@ -8581,6 +8729,8 @@ Le programme actuel sera remplacé.`)) return;
 
 function init(){
   load();
+  updateCloudStatusUI();
+  if(cloudEnabled()) cloudSyncOnBoot();
 
   // Restaurer la vue et le client actif depuis le dernier rafraîchissement
   try{
@@ -8712,6 +8862,49 @@ function init(){
   document.getElementById("btnExportSave").addEventListener("click",exportSave);
   document.getElementById("btnImportSave").addEventListener("click",()=>document.getElementById("fileImportSave").click());
   document.getElementById("fileImportSave").addEventListener("change",e=>{ if(e.target.files[0]) importSave(e.target.files[0]); e.target.value=""; });
+
+  // synchro cloud
+  document.getElementById("btnCloudSync").addEventListener("click",()=>{
+    const key = getSyncKey();
+    const input = document.getElementById("cloudSyncKeyInput");
+    if(input) input.value = key;
+    const info = document.getElementById("cloudSyncInfo");
+    const disc = document.getElementById("btnCloudDisconnect");
+    if(info) info.textContent = key
+      ? `Connecté avec le code "${key}". Utilise le même code sur tes autres appareils.`
+      : "Aucun code configuré pour l'instant — cet appareil fonctionne en local uniquement.";
+    if(disc) disc.classList.toggle("hidden", !key);
+    show("modalCloudSync");
+  });
+  document.getElementById("btnCloudConnect").addEventListener("click", async ()=>{
+    const input = document.getElementById("cloudSyncKeyInput");
+    const key = (input && input.value || "").trim();
+    const info = document.getElementById("cloudSyncInfo");
+    if(!key){ toast("Entre un code de synchro"); return; }
+    if(!supaClient){ if(info) info.textContent = "Supabase indisponible (vérifie ta connexion internet)."; return; }
+    setSyncKey(key);
+    if(info) info.textContent = "Connexion en cours…";
+    await cloudSyncOnBoot();
+    if(info) info.textContent = `Connecté avec le code "${key}". Utilise le même code sur tes autres appareils.`;
+    document.getElementById("btnCloudDisconnect")?.classList.remove("hidden");
+    toast("☁️ Synchro cloud activée");
+  });
+  document.getElementById("btnCloudSyncNow").addEventListener("click", async ()=>{
+    const info = document.getElementById("cloudSyncInfo");
+    if(!cloudEnabled()){ toast("Connecte d'abord un code de synchro"); return; }
+    if(info) info.textContent = "Synchronisation…";
+    await cloudSyncOnBoot();
+    if(info) info.textContent = "Dernière synchro : à l'instant.";
+    toast("☁️ Synchronisé");
+  });
+  document.getElementById("btnCloudDisconnect").addEventListener("click",()=>{
+    if(!confirm("Déconnecter cet appareil du cloud ? Tes données restent sur cet appareil en local, mais ne seront plus synchronisées automatiquement.")) return;
+    setSyncKey("");
+    updateCloudStatusUI();
+    document.getElementById("cloudSyncInfo").textContent = "Déconnecté — cet appareil fonctionne en local uniquement.";
+    document.getElementById("btnCloudDisconnect").classList.add("hidden");
+    toast("Déconnecté du cloud");
+  });
 
   // modales : fermeture générique
   document.querySelectorAll(".modal-back").forEach(m=>{
