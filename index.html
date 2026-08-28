@@ -467,6 +467,11 @@ tailwind.config = {
         Calculette macros
       </button>
 
+      <button data-nav="menuia" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#485246]">
+        <svg class="nav-ic w-[18px] h-[18px] text-[#7e887c]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1M2 12h3m14 0h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1M9 9h6v6H9z"/></svg>
+        Menu IA
+      </button>
+
     </nav>
 
     <!-- Sauvegardes -->
@@ -1322,6 +1327,90 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
       </div>
     </section>
 
+  <!-- ======= VUE : MENU IA ======= -->
+  <section id="view-menuia" class="view px-7 py-6">
+    <div id="menuiaEmpty" class="card card-pad text-center py-16" style="color:#8a9487;">
+      Sélectionnez un client pour générer un menu par IA.
+    </div>
+
+    <div id="menuiaBody" class="hidden space-y-5">
+      <!-- En-tête -->
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="font-display text-xl">🤖 Générateur de menus par IA</h2>
+          <p class="text-sm mt-1" style="color:#8a9487">Génère des menus réalistes et cohérents avec les macros cibles, les préférences et les allergies du client.</p>
+        </div>
+        <button id="btnAiSettings" class="btn btn-ghost">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.3 3.3a1.94 1.94 0 0 1 3.4 0l.3.6c.3.5.9.8 1.5.7l.7-.1a1.94 1.94 0 0 1 2.4 2.4l-.1.7c-.1.6.2 1.2.7 1.5l.6.3a1.94 1.94 0 0 1 0 3.4l-.6.3c-.5.3-.8.9-.7 1.5l.1.7a1.94 1.94 0 0 1-2.4 2.4l-.7-.1c-.6-.1-1.2.2-1.5.7l-.3.6a1.94 1.94 0 0 1-3.4 0l-.3-.6c-.3-.5-.9-.8-1.5-.7l-.7.1a1.94 1.94 0 0 1-2.4-2.4l.1-.7c.1-.6-.2-1.2-.7-1.5l-.6-.3a1.94 1.94 0 0 1 0-3.4l.6-.3c.5-.3.8-.9.7-1.5l-.1-.7a1.94 1.94 0 0 1 2.4-2.4l.7.1c.6.1 1.2-.2 1.5-.7l.3-.6Z"/><circle cx="12" cy="12" r="3"/></svg>
+          Réglages IA
+        </button>
+      </div>
+
+      <!-- Statut fournisseur -->
+      <div id="menuiaProviderStatus" class="text-xs px-3 py-2 rounded-lg" style="background:#eef3ef;color:#37503f;"></div>
+
+      <!-- Formulaire de génération -->
+      <div class="card card-pad space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="fld-lbl">Nombre de jours</label>
+            <select id="menuiaDays" class="fld">
+              <option value="1">1 jour</option>
+              <option value="3">3 jours</option>
+              <option value="7">7 jours (semaine complète)</option>
+            </select>
+          </div>
+          <div>
+            <label class="fld-lbl">Base d'aliments</label>
+            <select id="menuiaFoodScope" class="fld">
+              <option value="liked">Aliments aimés uniquement</option>
+              <option value="all">Toute la base (hors exclus/allergies)</option>
+            </select>
+          </div>
+          <div>
+            <label class="fld-lbl">Variété</label>
+            <select id="menuiaVariety" class="fld">
+              <option value="varied">Varier les repas jour après jour</option>
+              <option value="repeat">Menus similaires chaque jour (simplicité)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="fld-lbl">Consignes libres pour l'IA (optionnel)</label>
+          <textarea id="menuiaInstructions" class="fld" rows="2" placeholder="Ex : pas de porc, privilégier les recettes rapides, plus de poisson cette semaine..."></textarea>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <button id="btnMenuiaGenerate" class="btn btn-primary">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1M3 12h3m12 0h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+            Générer via IA
+          </button>
+          <span id="menuiaLoading" class="hidden text-sm" style="color:#8a9487">⏳ Génération en cours (ça peut prendre 10-30s)...</span>
+          <span id="menuiaError" class="hidden text-sm" style="color:#c0392b"></span>
+        </div>
+      </div>
+
+      <!-- Résultat -->
+      <div id="menuiaResult" class="hidden space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div class="seg" id="menuiaDayTabs"></div>
+          <div class="flex items-center gap-2">
+            <button id="btnMenuiaRegenerate" class="btn btn-ghost">🔄 Régénérer</button>
+            <button id="btnMenuiaSave" class="btn btn-ghost">💾 Enregistrer pour ce client</button>
+            <button id="btnMenuiaPdf" class="btn btn-amber">📄 Exporter PDF</button>
+          </div>
+        </div>
+        <div id="menuiaDayContent"></div>
+        <div id="menuiaNotes" class="card card-pad text-sm hidden" style="color:#485246;"></div>
+      </div>
+
+      <!-- Historique des menus enregistrés -->
+      <div id="menuiaHistoryWrap" class="hidden">
+        <p class="fld-lbl mb-2">Menus enregistrés pour ce client</p>
+        <div id="menuiaHistory" class="space-y-2"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ======= VUE : SUIVI & NOTES ======= -->
   <section id="view-suivi" class="view">
     <div id="suiviEmpty" class="card card-pad text-center py-16" style="color:#8a9487;">
@@ -1493,6 +1582,48 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
 </div>
 
 <!-- ===== MODALE IMPORTER JOURNÉE TYPE ===== -->
+<div id="modalAiSettings" class="modal-back">
+  <div class="modal-card">
+    <div class="px-6 py-5 border-b border-line flex items-center justify-between">
+      <h3 class="font-display text-lg">🤖 Réglages IA</h3>
+      <button data-close class="text-[#aab2a6] hover:text-ink text-xl leading-none">✕</button>
+    </div>
+    <div class="px-6 py-5 space-y-5">
+      <p class="text-sm" style="color:#798376;">
+        Renseigne une ou plusieurs clés API. Les clés sont stockées <strong>uniquement dans ce navigateur</strong> (jamais envoyées ailleurs qu'au fournisseur choisi).
+        Ordre de priorité utilisé automatiquement : <strong>Claude → Gemini → GPT</strong> (le premier fournisseur avec une clé renseignée est utilisé).
+      </p>
+      <div class="rounded-xl p-3 text-sm" style="background:#fdecc8;border:1px solid #f0d3a0;">
+        <p class="text-xs" style="color:#8a5a10;">💡 <strong>Gemini</strong> propose une vraie clé API gratuite (Google AI Studio, sans carte bancaire) — c'est le seul fournisseur 100% gratuit ici. Claude et GPT sont payants à l'usage (mais très peu coûteux pour ce genre de génération).</p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="fld-lbl">Clé API Claude (Anthropic) — <a href="https://console.anthropic.com/settings/keys" target="_blank" class="underline">obtenir une clé</a></label>
+        <input id="aiClaudeKey" type="password" class="fld" placeholder="sk-ant-...">
+        <input id="aiClaudeModel" type="text" class="fld" placeholder="claude-sonnet-4-5">
+      </div>
+
+      <div class="space-y-2">
+        <label class="fld-lbl">Clé API Gemini (Google) — <a href="https://aistudio.google.com/apikey" target="_blank" class="underline">obtenir une clé gratuite</a></label>
+        <input id="aiGeminiKey" type="password" class="fld" placeholder="AIza...">
+        <input id="aiGeminiModel" type="text" class="fld" placeholder="gemini-2.5-flash">
+      </div>
+
+      <div class="space-y-2">
+        <label class="fld-lbl">Clé API GPT (OpenAI) — <a href="https://platform.openai.com/api-keys" target="_blank" class="underline">obtenir une clé</a></label>
+        <input id="aiOpenaiKey" type="password" class="fld" placeholder="sk-...">
+        <input id="aiOpenaiModel" type="text" class="fld" placeholder="gpt-4o-mini">
+      </div>
+
+      <div id="aiSettingsStatus" class="text-xs" style="color:#8a9487"></div>
+    </div>
+    <div class="px-6 py-4 border-t border-line flex justify-end gap-2">
+      <button data-close class="btn btn-ghost">Fermer</button>
+      <button id="btnSaveAiSettings" class="btn btn-primary">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalImportJournee" class="modal-back">
   <div class="modal-card">
     <div class="px-6 py-5 border-b border-line flex items-center justify-between">
@@ -8118,7 +8249,7 @@ function doExport(){
 /* =========================================================
    14. UTILITAIRES UI
    ========================================================= */
-const titles={ clients:"Clients", suivi:"Suivi & Notes", profil:"Fiche & macros", programme:"Programme", prefs:"Préférences", aliments:"Base aliments", batch:"Batch & foyer", journee:"Journée type", calculette:"Calculette macros" };
+const titles={ clients:"Clients", suivi:"Suivi & Notes", profil:"Fiche & macros", programme:"Programme", prefs:"Préférences", aliments:"Base aliments", batch:"Batch & foyer", journee:"Journée type", calculette:"Calculette macros", menuia:"Menu IA" };
 let currentView="clients";
 function goTo(v){
   currentView=v;
@@ -8138,6 +8269,7 @@ function goTo(v){
   if(v==="prefs") renderPrefs();
   if(v==="journee") renderJourneeType();
   if(v==="calculette") renderCalculette();
+  if(v==="menuia") renderMenuIA();
   if(v==="suivi") renderSuivi();
 }
 function show(id){ document.getElementById(id).classList.add("show"); }
@@ -8849,6 +8981,7 @@ function init(){
   document.getElementById("btnDoImportJournee")?.addEventListener("click", doImportJourneeType);
   document.getElementById("btnClearWeek")?.addEventListener("click", clearWeek);
   initCalculette();
+  initMenuIA();
   initSuivi();
   document.getElementById("btnEcart").addEventListener("click",addEcart);
   document.getElementById("ecartKcal").addEventListener("keydown",e=>{ if(e.key==="Enter") addEcart(); });
@@ -11847,6 +11980,461 @@ function initCalculette() {
   });
 
   document.getElementById("calcClientCompare")?.addEventListener("change", _renderCalcTotals);
+}
+
+/* =========================================================
+   MENU IA — génération de programmes alimentaires / menus
+   via un fournisseur d'IA externe (Claude / Gemini / GPT)
+   ========================================================= */
+
+/* ---- Config (clés API stockées en local, jamais synchronisées) ---- */
+function loadAIConfig(){
+  let cfg=null;
+  try{ cfg = JSON.parse(localStorage.getItem("yael_ai_config")||"null"); }catch(e){}
+  return Object.assign({
+    order: ["claude","gemini","openai"],
+    claudeKey:"", claudeModel:"claude-sonnet-4-5",
+    geminiKey:"", geminiModel:"gemini-2.5-flash",
+    openaiKey:"", openaiModel:"gpt-4o-mini"
+  }, cfg||{});
+}
+function saveAIConfig(cfg){ try{ localStorage.setItem("yael_ai_config", JSON.stringify(cfg)); }catch(e){} }
+let AI_CONFIG = loadAIConfig();
+
+function aiActiveProviderLabel(){
+  const names={claude:"Claude",gemini:"Gemini",openai:"GPT"};
+  const order=(AI_CONFIG.order&&AI_CONFIG.order.length)?AI_CONFIG.order:["claude","gemini","openai"];
+  const keys={claude:AI_CONFIG.claudeKey,gemini:AI_CONFIG.geminiKey,openai:AI_CONFIG.openaiKey};
+  const found = order.find(p=>keys[p]);
+  return found ? names[found] : null;
+}
+
+/* ---- Appels bruts par fournisseur ---- */
+async function aiCallClaude(system,userMsg,apiKey,model){
+  const res = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "x-api-key": apiKey,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"
+    },
+    body: JSON.stringify({
+      model: model||"claude-sonnet-4-5",
+      max_tokens: 4096,
+      system,
+      messages:[{role:"user",content:userMsg}]
+    })
+  });
+  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("Claude ("+res.status+") "+t.slice(0,180)); }
+  const data = await res.json();
+  return (data.content||[]).map(b=>b.text||"").join("");
+}
+
+async function aiCallGemini(system,userMsg,apiKey,model){
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model||"gemini-2.5-flash")}:generateContent`;
+  const res = await fetch(url,{
+    method:"POST",
+    headers:{ "content-type":"application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      system_instruction:{ parts:[{text:system}] },
+      contents:[{ role:"user", parts:[{text:userMsg}] }],
+      generationConfig:{ temperature:0.7, responseMimeType:"application/json" }
+    })
+  });
+  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("Gemini ("+res.status+") "+t.slice(0,180)); }
+  const data = await res.json();
+  const parts = (data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts)||[];
+  return parts.map(p=>p.text||"").join("");
+}
+
+async function aiCallOpenAI(system,userMsg,apiKey,model){
+  const res = await fetch("https://api.openai.com/v1/chat/completions",{
+    method:"POST",
+    headers:{ "content-type":"application/json", "authorization":"Bearer "+apiKey },
+    body: JSON.stringify({
+      model: model||"gpt-4o-mini",
+      messages:[{role:"system",content:system},{role:"user",content:userMsg}],
+      response_format:{type:"json_object"},
+      temperature:0.7
+    })
+  });
+  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("GPT ("+res.status+") "+t.slice(0,180)); }
+  const data = await res.json();
+  return (data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";
+}
+
+/* Essaie les fournisseurs dans l'ordre de priorité (le premier avec une clé configurée gagne),
+   et bascule automatiquement sur le suivant en cas d'échec (clé invalide, quota dépassé...). */
+async function callAI(system,userMsg){
+  const cfg = AI_CONFIG;
+  const providers = {
+    claude:{ key:cfg.claudeKey, fn:()=>aiCallClaude(system,userMsg,cfg.claudeKey,cfg.claudeModel) },
+    gemini:{ key:cfg.geminiKey, fn:()=>aiCallGemini(system,userMsg,cfg.geminiKey,cfg.geminiModel) },
+    openai:{ key:cfg.openaiKey, fn:()=>aiCallOpenAI(system,userMsg,cfg.openaiKey,cfg.openaiModel) },
+  };
+  const order = (cfg.order&&cfg.order.length)?cfg.order:["claude","gemini","openai"];
+  const errors=[];
+  for(const p of order){
+    const prov = providers[p];
+    if(!prov || !prov.key) continue;
+    try{
+      const raw = await prov.fn();
+      return { raw, provider:p };
+    }catch(e){ errors.push(p+" : "+e.message); }
+  }
+  throw new Error(errors.length ? errors.join(" — ") : "Aucune clé API configurée. Clique sur « Réglages IA » pour en ajouter une (Gemini est gratuit).");
+}
+
+function aiParseJson(raw){
+  let t = String(raw||"").trim();
+  t = t.replace(/^```json\s*/i,"").replace(/^```\s*/,"").replace(/```\s*$/,"").trim();
+  try{ return JSON.parse(t); }
+  catch(e){
+    const s=t.indexOf("{"), en=t.lastIndexOf("}");
+    if(s>=0 && en>s){ try{ return JSON.parse(t.slice(s,en+1)); }catch(e2){} }
+    throw new Error("Réponse IA illisible (JSON invalide). Réessaie, ou change de fournisseur dans les réglages.");
+  }
+}
+
+/* ---- Construction du contexte / prompt à partir des données réelles du client ---- */
+function menuiaGatherFoods(c, scope){
+  const excluded = new Set((c.prefs&&c.prefs.excluded)||[]);
+  let pool = DB.foods.filter(f=>!excluded.has(f.id));
+  if(scope==="liked"){
+    const liked = new Set((c.prefs&&c.prefs.liked)||[]);
+    const likedPool = pool.filter(f=>liked.has(f.id));
+    if(likedPool.length>=8) pool = likedPool; // pas assez d'aimés -> on garde toute la base (hors exclus)
+  }
+  return pool.slice(0,240).map(f=>{
+    const uw = getUnitWeight(f.name);
+    const o = {
+      nom:f.name, categorie:f.cat||"",
+      kcal_100g:n0(f.kcal), proteines_100g:n0(f.prot), glucides_100g:n0(f.gluc), lipides_100g:n0(f.lip)
+    };
+    if(uw) o.poids_unitaire_g = Math.round(uw);
+    return o;
+  });
+}
+
+function menuiaGoalLabel(c){
+  const goal = goalType(c);
+  return {seche:"Sèche / perte de masse grasse", maintien:"Maintien", prise:"Prise de masse"}[goal] || goal;
+}
+
+function buildMenuiaPrompt(c, opts){
+  const mac = effectiveMacros(c);
+  const tgt = targetKcal(c);
+  const nbRepas = Math.min(6, Math.max(1, Number(c.mealCount)||4));
+  const foods = menuiaGatherFoods(c, opts.foodScope);
+  const excludedNames = DB.foods.filter(f=>((c.prefs&&c.prefs.excluded)||[]).includes(f.id)).map(f=>f.name);
+  const allergies = (c.profile&&c.profile.allergies)||[];
+  const goalLbl = menuiaGoalLabel(c);
+  const days = opts.days;
+
+  const system = `Tu es un(e) diététicien(ne)-nutritionniste expert(e), assistant(e) d'un coach sportif francophone. Tu génères des menus alimentaires réalistes, équilibrés et cohérents avec la culture alimentaire française. Tu réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après, sans balises markdown. Respecte STRICTEMENT le schéma demandé.
+
+RÈGLES ABSOLUES :
+1. N'utilise JAMAIS un aliment présent dans la liste des exclusions/allergies, même transformé ou caché dans une recette. C'est un impératif de sécurité alimentaire.
+2. Pour chaque repas, privilégie en priorité les aliments fournis dans la liste "aliments disponibles" (utilise leurs valeurs kcal/macros pour 100g pour calculer les grammages). Tu peux ajouter occasionnellement un aliment courant non listé (assaisonnement, épice, eau, café) uniquement si son apport calorique est négligeable.
+3. Le total kcal et macros (protéines/glucides/lipides) de chaque JOURNÉE doit être aussi proche que possible de la cible (écart maximum ±7%).
+4. Répartis l'énergie sur exactement ${nbRepas} repas par jour, dans un ordre logique (petit-déjeuner, déjeuner, dîner, collations selon le cas).
+5. Les grammages doivent être réalistes et arrondis (5g ou 10g près, pas de décimales absurdes type 347.28g).
+6. Calcule kcal/protéines/glucides/lipides de chaque aliment à partir de son grammage réel et de ses valeurs pour 100g fournies.`;
+
+  const userMsg = `Génère un plan alimentaire de ${days} jour(s) pour ce client.
+
+CLIENT :
+- Objectif : ${goalLbl}
+- Cible calorique quotidienne : ${Math.round(tgt)} kcal
+- Macros cibles quotidiennes : protéines ${Math.round(mac.prot)}g · glucides ${Math.round(mac.gluc)}g · lipides ${Math.round(mac.lip)}g
+- Nombre de repas par jour : ${nbRepas}
+- Allergies déclarées (À NE JAMAIS UTILISER) : ${allergies.length?allergies.join(", "):"aucune"}
+- Aliments exclus par le client (À NE JAMAIS UTILISER) : ${excludedNames.length?excludedNames.join(", "):"aucun"}
+- Variété demandée : ${opts.variety==="repeat" ? "menus similaires chaque jour (simplicité pour le client)" : "varier les repas d'un jour à l'autre"}
+${opts.instructions ? "- Consignes du coach : "+opts.instructions : ""}
+
+ALIMENTS DISPONIBLES (nom, catégorie, valeurs pour 100g) :
+${JSON.stringify(foods)}
+
+Réponds avec UNIQUEMENT ce JSON (pas de texte autour, pas de markdown) :
+{
+  "days": [
+    {
+      "label": "Jour 1",
+      "meals": [
+        {
+          "nom": "Petit-déjeuner",
+          "aliments": [ { "nom": "string", "grammes": number, "kcal": number, "proteines": number, "glucides": number, "lipides": number } ],
+          "kcalTotal": number, "proteinesTotal": number, "glucidesTotal": number, "lipidesTotal": number
+        }
+      ],
+      "kcalJour": number, "proteinesJour": number, "glucidesJour": number, "lipidesJour": number
+    }
+  ],
+  "conseils": "2 à 3 phrases de conseils courts et concrets pour ce client"
+}`;
+
+  return { system, user: userMsg };
+}
+
+/* ---- Orchestration & rendu ---- */
+let _menuiaPlan = null;
+let _menuiaActiveDay = 0;
+
+async function generateMenuIA(){
+  const c = client();
+  if(!c){ toast("Sélectionnez d'abord un client"); return; }
+
+  const days = Number(document.getElementById("menuiaDays").value)||1;
+  const foodScope = document.getElementById("menuiaFoodScope").value;
+  const variety = document.getElementById("menuiaVariety").value;
+  const instructions = document.getElementById("menuiaInstructions").value.trim();
+
+  const btn = document.getElementById("btnMenuiaGenerate");
+  const loadingEl = document.getElementById("menuiaLoading");
+  const errEl = document.getElementById("menuiaError");
+  const resultEl = document.getElementById("menuiaResult");
+  btn.setAttribute("disabled","disabled");
+  loadingEl.classList.remove("hidden");
+  errEl.classList.add("hidden");
+
+  try{
+    const { system, user } = buildMenuiaPrompt(c, { days, foodScope, variety, instructions });
+    const { raw, provider } = await callAI(system, user);
+    const parsed = aiParseJson(raw);
+    if(!parsed || !Array.isArray(parsed.days) || !parsed.days.length){
+      throw new Error("La réponse IA ne contient pas de plan alimentaire exploitable.");
+    }
+    _menuiaPlan = { plan: parsed, provider, createdAt: Date.now(), days };
+    _menuiaActiveDay = 0;
+    renderMenuiaResult();
+    resultEl.classList.remove("hidden");
+    toast(`✓ Menu généré via ${({claude:"Claude",gemini:"Gemini",openai:"GPT"})[provider]||provider}`);
+  }catch(e){
+    console.error(e);
+    errEl.textContent = "❌ " + e.message;
+    errEl.classList.remove("hidden");
+  }finally{
+    btn.removeAttribute("disabled");
+    loadingEl.classList.add("hidden");
+  }
+}
+
+function menuiaFmt1(n){ return (Math.round(n*10)/10).toLocaleString("fr-FR"); }
+
+function renderMenuiaResult(){
+  if(!_menuiaPlan) return;
+  const plan = _menuiaPlan.plan;
+  const tabsEl = document.getElementById("menuiaDayTabs");
+  tabsEl.innerHTML = plan.days.map((d,i)=>
+    `<button data-daytab="${i}" class="${i===_menuiaActiveDay?"active":""}">${esc(d.label||("Jour "+(i+1)))}</button>`
+  ).join("");
+  tabsEl.querySelectorAll("[data-daytab]").forEach(b=>b.addEventListener("click",()=>{
+    _menuiaActiveDay = Number(b.dataset.daytab);
+    renderMenuiaResult();
+  }));
+
+  const c = client();
+  const tgt = c ? targetKcal(c) : 0;
+
+  const day = plan.days[_menuiaActiveDay] || plan.days[0];
+  const contentEl = document.getElementById("menuiaDayContent");
+
+  const deltaKcal = (day.kcalJour||0) - tgt;
+  const okDelta = tgt>0 && Math.abs(deltaKcal) <= tgt*0.08;
+  const deltaChip = tgt ? `<span class="chip" style="background:${okDelta?'#eef3ef':'#fdecea'};color:${okDelta?'#37503f':'#c0392b'}">${deltaKcal>=0?'+':''}${fmt(deltaKcal)} kcal vs cible</span>` : "";
+
+  let html = `<div class="card card-pad mb-1">
+    <div class="flex flex-wrap items-center gap-3 justify-between">
+      <div class="text-sm" style="color:#485246">
+        <strong class="num">${fmt(day.kcalJour||0)}</strong> kcal · P <strong class="num">${fmt(day.proteinesJour||0)}g</strong> · G <strong class="num">${fmt(day.glucidesJour||0)}g</strong> · L <strong class="num">${fmt(day.lipidesJour||0)}g</strong>
+      </div>
+      ${deltaChip}
+    </div>
+  </div>`;
+
+  (day.meals||[]).forEach(m=>{
+    html += `<div class="jt-meal-card">
+      <div class="jt-meal-header">
+        <span class="font-semibold text-sm flex-1">${esc(m.nom||"Repas")}</span>
+        <span class="text-xs num" style="color:#8a9487">${fmt(m.kcalTotal||0)} kcal · P${fmt(m.proteinesTotal||0)} G${fmt(m.glucidesTotal||0)} L${fmt(m.lipidesTotal||0)}</span>
+      </div>`;
+    (m.aliments||[]).forEach(a=>{
+      html += `<div class="jt-slot">
+        <div class="jt-slot-info">
+          <div class="text-sm">${esc(a.nom||"")}</div>
+          <div class="text-xs" style="color:#8a9487">P${menuiaFmt1(a.proteines||0)} · G${menuiaFmt1(a.glucides||0)} · L${menuiaFmt1(a.lipides||0)}</div>
+        </div>
+        <div class="jt-slot-qty text-sm num">${fmt(a.grammes||0)} g<div class="text-xs" style="color:#8a9487">${fmt(a.kcal||0)} kcal</div></div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  contentEl.innerHTML = html;
+
+  const notesEl = document.getElementById("menuiaNotes");
+  if(plan.conseils){
+    notesEl.textContent = "💡 " + plan.conseils;
+    notesEl.classList.remove("hidden");
+  } else {
+    notesEl.classList.add("hidden");
+  }
+}
+
+function saveMenuiaPlan(){
+  const c = client();
+  if(!c || !_menuiaPlan){ toast("Aucun menu à enregistrer"); return; }
+  if(!Array.isArray(c.aiMenus)) c.aiMenus = [];
+  c.aiMenus.unshift({
+    id: "aim_"+Math.random().toString(36).slice(2,9),
+    createdAt: _menuiaPlan.createdAt,
+    provider: _menuiaPlan.provider,
+    days: _menuiaPlan.days,
+    plan: _menuiaPlan.plan
+  });
+  c.aiMenus = c.aiMenus.slice(0,10);
+  save();
+  renderMenuiaHistory();
+  toast("✓ Menu enregistré pour ce client");
+}
+
+function renderMenuiaHistory(){
+  const c = client();
+  const wrap = document.getElementById("menuiaHistoryWrap");
+  const el = document.getElementById("menuiaHistory");
+  if(!c || !Array.isArray(c.aiMenus) || !c.aiMenus.length){
+    wrap.classList.add("hidden");
+    return;
+  }
+  wrap.classList.remove("hidden");
+  el.innerHTML = c.aiMenus.map(h=>{
+    const d = new Date(h.createdAt);
+    const provLbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[h.provider]||h.provider;
+    return `<div class="card card-pad flex items-center justify-between text-sm">
+      <span>${h.days} jour(s) · ${provLbl} · ${d.toLocaleDateString("fr-FR")} ${d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</span>
+      <div class="flex gap-2">
+        <button data-loadaim="${h.id}" class="btn btn-ghost text-xs py-1 px-2">Charger</button>
+        <button data-delaim="${h.id}" class="btn btn-ghost text-xs py-1 px-2" style="color:#c0392b">Supprimer</button>
+      </div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll("[data-loadaim]").forEach(b=>b.addEventListener("click",()=>{
+    const h = c.aiMenus.find(x=>x.id===b.dataset.loadaim);
+    if(!h) return;
+    _menuiaPlan = { plan:h.plan, provider:h.provider, createdAt:h.createdAt, days:h.days };
+    _menuiaActiveDay = 0;
+    renderMenuiaResult();
+    document.getElementById("menuiaResult").classList.remove("hidden");
+    toast("Menu chargé");
+  }));
+  el.querySelectorAll("[data-delaim]").forEach(b=>b.addEventListener("click",()=>{
+    c.aiMenus = c.aiMenus.filter(x=>x.id!==b.dataset.delaim);
+    save();
+    renderMenuiaHistory();
+  }));
+}
+
+function exportMenuiaPdf(){
+  const c = client();
+  if(!c || !_menuiaPlan){ toast("Génère d'abord un menu"); return; }
+  const plan = _menuiaPlan.plan;
+  let body = pdfHeader(`Menu alimentaire — ${esc(((c.profile.prenom||"")+" "+(c.profile.nom||"")).trim())}`, `Généré par IA (${esc(({claude:"Claude",gemini:"Gemini",openai:"GPT"})[_menuiaPlan.provider]||_menuiaPlan.provider)})`);
+
+  plan.days.forEach((day,i)=>{
+    body += `<div style="${i>0?PDF_S.pageBreak:''}">
+      <p style="${PDF_S.dayTitle}">${esc(day.label||("Jour "+(i+1)))} — ${fmt(day.kcalJour||0)} kcal (P${fmt(day.proteinesJour||0)} G${fmt(day.glucidesJour||0)} L${fmt(day.lipidesJour||0)})</p>`;
+    (day.meals||[]).forEach(m=>{
+      body += `<p style="${PDF_S.mealLbl}">${esc(m.nom||"Repas")} — ${fmt(m.kcalTotal||0)} kcal</p>
+        <table style="${PDF_S.table}"><thead><tr>
+          <th style="${PDF_S.th}">Aliment</th><th style="${PDF_S.thR}">Grammes</th><th style="${PDF_S.thR}">Kcal</th><th style="${PDF_S.thR}">Prot</th><th style="${PDF_S.thR}">Gluc</th><th style="${PDF_S.thR}">Lip</th>
+        </tr></thead><tbody>`;
+      (m.aliments||[]).forEach(a=>{
+        body += `<tr>
+          <td style="${PDF_S.td}">${esc(a.nom||"")}</td>
+          <td style="${PDF_S.tdR}">${fmt(a.grammes||0)} g</td>
+          <td style="${PDF_S.tdR}">${fmt(a.kcal||0)}</td>
+          <td style="${PDF_S.tdR}">${menuiaFmt1(a.proteines||0)}</td>
+          <td style="${PDF_S.tdR}">${menuiaFmt1(a.glucides||0)}</td>
+          <td style="${PDF_S.tdR}">${menuiaFmt1(a.lipides||0)}</td>
+        </tr>`;
+      });
+      body += `</tbody></table>`;
+    });
+    body += `</div>`;
+  });
+  if(plan.conseils){
+    body += `<div style="${PDF_S.note}"><strong>Conseils :</strong> ${esc(plan.conseils)}</div>`;
+  }
+  body += pdfFooter();
+  renderSimplePdf(body, `menu-ia-${slug(c)}.pdf`);
+}
+
+/* ---- Vue & réglages ---- */
+function renderMenuIA(){
+  const c = client();
+  const empty = document.getElementById("menuiaEmpty");
+  const bodyEl = document.getElementById("menuiaBody");
+  if(!c){
+    empty.classList.remove("hidden");
+    bodyEl.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  bodyEl.classList.remove("hidden");
+
+  const statusEl = document.getElementById("menuiaProviderStatus");
+  const activeLabel = aiActiveProviderLabel();
+  if(activeLabel){
+    statusEl.textContent = `✓ Fournisseur actif : ${activeLabel}`;
+    statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
+  }else{
+    statusEl.textContent = "⚠ Aucune clé API configurée — clique sur « Réglages IA » (Gemini est gratuit).";
+    statusEl.style.background = "#fdecea"; statusEl.style.color = "#c0392b";
+  }
+
+  if(_menuiaPlan){
+    renderMenuiaResult();
+    document.getElementById("menuiaResult").classList.remove("hidden");
+  }
+  renderMenuiaHistory();
+}
+
+function openAiSettingsModal(){
+  document.getElementById("aiClaudeKey").value = AI_CONFIG.claudeKey||"";
+  document.getElementById("aiClaudeModel").value = AI_CONFIG.claudeModel||"claude-sonnet-4-5";
+  document.getElementById("aiGeminiKey").value = AI_CONFIG.geminiKey||"";
+  document.getElementById("aiGeminiModel").value = AI_CONFIG.geminiModel||"gemini-2.5-flash";
+  document.getElementById("aiOpenaiKey").value = AI_CONFIG.openaiKey||"";
+  document.getElementById("aiOpenaiModel").value = AI_CONFIG.openaiModel||"gpt-4o-mini";
+  document.getElementById("aiSettingsStatus").textContent = "";
+  show("modalAiSettings");
+}
+
+function saveAiSettingsFromModal(){
+  AI_CONFIG = Object.assign({}, AI_CONFIG, {
+    claudeKey: document.getElementById("aiClaudeKey").value.trim(),
+    claudeModel: document.getElementById("aiClaudeModel").value.trim()||"claude-sonnet-4-5",
+    geminiKey: document.getElementById("aiGeminiKey").value.trim(),
+    geminiModel: document.getElementById("aiGeminiModel").value.trim()||"gemini-2.5-flash",
+    openaiKey: document.getElementById("aiOpenaiKey").value.trim(),
+    openaiModel: document.getElementById("aiOpenaiModel").value.trim()||"gpt-4o-mini",
+    order: ["claude","gemini","openai"]
+  });
+  saveAIConfig(AI_CONFIG);
+  hide("modalAiSettings");
+  toast("✓ Réglages IA enregistrés");
+  renderMenuIA();
+}
+
+function initMenuIA(){
+  document.getElementById("btnAiSettings")?.addEventListener("click", openAiSettingsModal);
+  document.getElementById("btnSaveAiSettings")?.addEventListener("click", saveAiSettingsFromModal);
+  document.getElementById("btnMenuiaGenerate")?.addEventListener("click", generateMenuIA);
+  document.getElementById("btnMenuiaRegenerate")?.addEventListener("click", generateMenuIA);
+  document.getElementById("btnMenuiaSave")?.addEventListener("click", saveMenuiaPlan);
+  document.getElementById("btnMenuiaPdf")?.addEventListener("click", exportMenuiaPdf);
 }
 
 </script>
