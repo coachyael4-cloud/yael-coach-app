@@ -1606,7 +1606,8 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
       <div class="space-y-2">
         <label class="fld-lbl">Clé API Gemini (Google) — <a href="https://aistudio.google.com/apikey" target="_blank" class="underline">obtenir une clé gratuite</a></label>
         <input id="aiGeminiKey" type="password" class="fld" placeholder="AIza...">
-        <input id="aiGeminiModel" type="text" class="fld" placeholder="gemini-2.5-flash">
+        <input id="aiGeminiModel" type="text" class="fld" placeholder="auto (recommandé)">
+        <p class="text-xs" style="color:#8a9487;">Laisse « auto » : l'appli détecte elle-même le meilleur modèle Gemini disponible avec ta clé, et se met à jour toute seule si Google renomme ou retire un modèle.</p>
       </div>
 
       <div class="space-y-2">
@@ -11994,7 +11995,7 @@ function loadAIConfig(){
   return Object.assign({
     order: ["claude","gemini","openai"],
     claudeKey:"", claudeModel:"claude-sonnet-4-5",
-    geminiKey:"", geminiModel:"gemini-2.5-flash",
+    geminiKey:"", geminiModel:"auto",
     openaiKey:"", openaiModel:"gpt-4o-mini"
   }, cfg||{});
 }
@@ -12048,6 +12049,101 @@ async function aiCallGemini(system,userMsg,apiKey,model){
   return parts.map(p=>p.text||"").join("");
 }
 
+/* ---- Auto-résolution du modèle Gemini ----
+   Google renomme/retire régulièrement ses modèles (ex: gemini-2.0-flash -> gemini-3.6-flash).
+   Plutôt que de dépendre d'un nom codé en dur, on interroge l'API "ListModels" de Google pour
+   savoir quels modèles sont réellement disponibles AVEC CETTE CLÉ, on choisit le meilleur candidat
+   (un modèle "flash", donc rapide/économique, en excluant les versions preview/experimental),
+   et on met le résultat en cache. Si un appel échoue parce que le modèle configuré a été retiré,
+   on rafraîchit automatiquement ce cache et on réessaie une fois, sans intervention de l'utilisateur. */
+const GEMINI_MODEL_CACHE_KEY = "yael_gemini_model_cache";
+
+function geminiCacheGetModel(){
+  try{
+    const c = JSON.parse(localStorage.getItem(GEMINI_MODEL_CACHE_KEY)||"null");
+    if(c && c.model && (Date.now()-c.ts) < 7*24*3600*1000) return c.model;
+  }catch(e){}
+  return null;
+}
+function geminiCacheSetModel(model){
+  try{ localStorage.setItem(GEMINI_MODEL_CACHE_KEY, JSON.stringify({model, ts:Date.now()})); }catch(e){}
+}
+
+async function geminiListModels(apiKey){
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("Gemini (liste modèles, "+res.status+") "+t.slice(0,180)); }
+  const data = await res.json();
+  return (data.models||[])
+    .filter(m=>Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
+    .map(m=>String(m.name||"").replace(/^models\//,""))
+    .filter(Boolean);
+}
+
+function geminiPickBestModel(models){
+  if(!models || !models.length) return null;
+  const scored = models.map(name=>{
+    const n = name.toLowerCase();
+    let score = 0;
+    if(n.includes("flash")) score += 100;               // rapide/économique : idéal pour la génération de menus
+    else if(n.includes("pro")) score += 60;
+    if(n.includes("latest")) score += 25;
+    if(/(exp|preview|thinking|image|vision|embedding|tts|lite)/.test(n)) score -= 40;
+    const verMatch = n.match(/(\d+(?:\.\d+)?)/);
+    if(verMatch) score += parseFloat(verMatch[1]) * 10;  // préfère la version la plus récente
+    return { name, score };
+  });
+  scored.sort((a,b)=>b.score-a.score);
+  return scored[0].name;
+}
+
+async function geminiResolveModel(apiKey, opts){
+  opts = opts||{};
+  if(!opts.forceRefresh){
+    const cached = geminiCacheGetModel();
+    if(cached) return cached;
+  }
+  const models = await geminiListModels(apiKey);
+  const best = geminiPickBestModel(models);
+  if(!best) throw new Error("Aucun modèle Gemini compatible n'a été trouvé pour cette clé API.");
+  geminiCacheSetModel(best);
+  return best;
+}
+
+/* Appel Gemini "intelligent" : utilise le modèle choisi par l'utilisateur si renseigné, sinon
+   auto-détecte le meilleur modèle disponible ; si l'appel échoue parce que le modèle n'existe
+   plus (retiré/renommé par Google), rafraîchit automatiquement la liste et réessaie une fois. */
+async function aiCallGeminiSmart(system,userMsg,apiKey,model){
+  const explicit = (model||"").trim();
+  const useExplicit = explicit && explicit.toLowerCase()!=="auto";
+  let modelToTry = useExplicit ? explicit : geminiCacheGetModel();
+
+  if(!modelToTry){
+    modelToTry = await geminiResolveModel(apiKey);
+  }
+
+  try{
+    return await aiCallGemini(system,userMsg,apiKey,modelToTry);
+  }catch(e){
+    const msg = String(e.message||"");
+    const looksUnavailable = /404|not[\s_-]?found|no longer available|not supported|deprecated/i.test(msg);
+    if(!looksUnavailable) throw e;
+
+    const fresh = await geminiResolveModel(apiKey, {forceRefresh:true});
+    const raw = await aiCallGemini(system,userMsg,apiKey,fresh);
+
+    // Le modèle qui vient de marcher devient le nouveau modèle par défaut, pour que
+    // les prochaines générations n'aient plus jamais à redécouvrir un modèle valide.
+    if(!useExplicit || fresh!==explicit){
+      AI_CONFIG = Object.assign({}, AI_CONFIG, { geminiModel: fresh });
+      saveAIConfig(AI_CONFIG);
+      const fld = document.getElementById("aiGeminiModel");
+      if(fld) fld.value = fresh;
+    }
+    toast(`✓ Modèle Gemini mis à jour automatiquement (${fresh})`);
+    return raw;
+  }
+}
+
 async function aiCallOpenAI(system,userMsg,apiKey,model){
   const res = await fetch("https://api.openai.com/v1/chat/completions",{
     method:"POST",
@@ -12070,7 +12166,7 @@ async function callAI(system,userMsg){
   const cfg = AI_CONFIG;
   const providers = {
     claude:{ key:cfg.claudeKey, fn:()=>aiCallClaude(system,userMsg,cfg.claudeKey,cfg.claudeModel) },
-    gemini:{ key:cfg.geminiKey, fn:()=>aiCallGemini(system,userMsg,cfg.geminiKey,cfg.geminiModel) },
+    gemini:{ key:cfg.geminiKey, fn:()=>aiCallGeminiSmart(system,userMsg,cfg.geminiKey,cfg.geminiModel) },
     openai:{ key:cfg.openaiKey, fn:()=>aiCallOpenAI(system,userMsg,cfg.openaiKey,cfg.openaiModel) },
   };
   const order = (cfg.order&&cfg.order.length)?cfg.order:["claude","gemini","openai"];
@@ -12405,7 +12501,7 @@ function openAiSettingsModal(){
   document.getElementById("aiClaudeKey").value = AI_CONFIG.claudeKey||"";
   document.getElementById("aiClaudeModel").value = AI_CONFIG.claudeModel||"claude-sonnet-4-5";
   document.getElementById("aiGeminiKey").value = AI_CONFIG.geminiKey||"";
-  document.getElementById("aiGeminiModel").value = AI_CONFIG.geminiModel||"gemini-2.5-flash";
+  document.getElementById("aiGeminiModel").value = AI_CONFIG.geminiModel||"auto";
   document.getElementById("aiOpenaiKey").value = AI_CONFIG.openaiKey||"";
   document.getElementById("aiOpenaiModel").value = AI_CONFIG.openaiModel||"gpt-4o-mini";
   document.getElementById("aiSettingsStatus").textContent = "";
@@ -12417,7 +12513,7 @@ function saveAiSettingsFromModal(){
     claudeKey: document.getElementById("aiClaudeKey").value.trim(),
     claudeModel: document.getElementById("aiClaudeModel").value.trim()||"claude-sonnet-4-5",
     geminiKey: document.getElementById("aiGeminiKey").value.trim(),
-    geminiModel: document.getElementById("aiGeminiModel").value.trim()||"gemini-2.5-flash",
+    geminiModel: document.getElementById("aiGeminiModel").value.trim()||"auto",
     openaiKey: document.getElementById("aiOpenaiKey").value.trim(),
     openaiModel: document.getElementById("aiOpenaiModel").value.trim()||"gpt-4o-mini",
     order: ["claude","gemini","openai"]
