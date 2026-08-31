@@ -788,6 +788,12 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>
                 Générer semaine
               </button>
+              <button id="btnGenWeekAI" class="btn btn-ghost text-[.82rem]" style="border-color:#c9d6cd;background:#f3f7f3;" title="Génère le programme de la semaine via IA (Claude/Gemini/GPT) au lieu de l'algorithme classique">
+                🤖 Semaine (IA)
+              </button>
+              <button id="btnGenDayAI" class="btn btn-ghost text-[.82rem]" style="border-color:#c9d6cd;background:#f3f7f3;" title="Génère uniquement le jour actif via IA">
+                🤖 Jour (IA)
+              </button>
               <button id="btnImportProgram" class="btn btn-ghost text-[.82rem]" title="Copier le programme d'un autre client en adaptant les grammages">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3m-1 11h6m-3-3 3 3-3 3"/></svg>
                 Importer depuis…
@@ -824,6 +830,8 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
               </button>
             </div>
           </div>
+
+          <div id="progAiStatus" class="hidden text-xs px-3 py-2 rounded-lg"></div>
 
           <div id="mealsContainer" class="space-y-4"><!-- rendu JS --></div>
 
@@ -1606,8 +1614,11 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
       <div class="space-y-2">
         <label class="fld-lbl">Clé API Gemini (Google) — <a href="https://aistudio.google.com/apikey" target="_blank" class="underline">obtenir une clé gratuite</a></label>
         <input id="aiGeminiKey" type="password" class="fld" placeholder="AIza...">
-        <input id="aiGeminiModel" type="text" class="fld" placeholder="gemini-2.5-flash">
-        <p class="text-xs" style="color:#8a9487">Si Google retire ce modèle plus tard, l'app bascule automatiquement sur une alternative connue — pas besoin d'y revenir à chaque fois.</p>
+        <div class="flex gap-2">
+          <input id="aiGeminiModel" type="text" class="fld flex-1" placeholder="gemini-flash-latest">
+          <button id="btnAiGeminiDetect" type="button" class="btn btn-ghost whitespace-nowrap">🔎 Détecter</button>
+        </div>
+        <p id="aiGeminiDetectStatus" class="text-xs" style="color:#8a9487">« gemini-flash-latest » est un alias officiel Google : il pointe toujours vers le dernier modèle Flash, sans jamais se figer. Le bouton Détecter reste dispo en secours si besoin.</p>
       </div>
 
       <div class="space-y-2">
@@ -8983,6 +8994,7 @@ function init(){
   document.getElementById("btnClearWeek")?.addEventListener("click", clearWeek);
   initCalculette();
   initMenuIA();
+  initProgrammeAI();
   initSuivi();
   document.getElementById("btnEcart").addEventListener("click",addEcart);
   document.getElementById("ecartKcal").addEventListener("keydown",e=>{ if(e.key==="Enter") addEcart(); });
@@ -11995,7 +12007,7 @@ function loadAIConfig(){
   return Object.assign({
     order: ["claude","gemini","openai"],
     claudeKey:"", claudeModel:"claude-sonnet-4-5",
-    geminiKey:"", geminiModel:"gemini-2.5-flash",
+    geminiKey:"", geminiModel:"gemini-flash-latest",
     openaiKey:"", openaiModel:"gpt-4o-mini"
   }, cfg||{});
 }
@@ -12032,10 +12044,32 @@ async function aiCallClaude(system,userMsg,apiKey,model){
   return (data.content||[]).map(b=>b.text||"").join("");
 }
 
-/* Liste de secours si le modèle configuré est retiré/renommé par Google (ça arrive
-   régulièrement — ex: gemini-2.0-flash a été retiré le 01/06/2026). On tente le modèle
-   choisi par l'utilisateur en premier, puis on retombe automatiquement sur des alternatives. */
-const GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash","gemini-flash-latest","gemini-2.5-flash-lite","gemini-2.0-flash"];
+/* Les noms de modèles Gemini changent régulièrement (dépréciations fréquentes chez Google).
+   Plutôt que de parier sur un nom figé, on interroge l'API pour savoir quels modèles sont
+   RÉELLEMENT disponibles avec la clé fournie, et on choisit automatiquement le meilleur. */
+async function aiListGeminiModels(apiKey){
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("Gemini : impossible de lister les modèles ("+res.status+") "+t.slice(0,150)); }
+  const data = await res.json();
+  return (data.models||[]).filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"));
+}
+
+function pickBestGeminiModel(models){
+  const names = models.map(m=>(m.name||"").replace(/^models\//,"")).filter(Boolean);
+  const score = n => {
+    let s = 0;
+    if(/flash/i.test(n)) s+=10;          // rapide + gratuit en priorité
+    if(/-lite/i.test(n)) s-=3;
+    if(/pro/i.test(n)) s-=5;             // plus lent / quota plus restreint sur le tier gratuit
+    if(/image|vision|tts|embedding|aqa|audio/i.test(n)) s-=50; // modèles non-texte, à exclure
+    if(/preview|exp/i.test(n)) s-=2;
+    const v = n.match(/gemini-(\d+(?:\.\d+)?)/i);
+    if(v) s += parseFloat(v[1]);         // préfère la version la plus récente
+    return s;
+  };
+  names.sort((a,b)=>score(b)-score(a));
+  return names[0]||null;
+}
 
 async function aiCallGeminiOnce(system,userMsg,apiKey,model){
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -12055,23 +12089,28 @@ async function aiCallGeminiOnce(system,userMsg,apiKey,model){
 }
 
 async function aiCallGemini(system,userMsg,apiKey,model){
-  const tried = new Set();
-  const candidates = [model||"gemini-2.5-flash", ...GEMINI_FALLBACK_MODELS].filter(m=>{
-    if(!m || tried.has(m)) return false;
-    tried.add(m); return true;
-  });
-  let lastErr;
-  for(const m of candidates){
+  const primary = model || "gemini-flash-latest";
+  try{
+    return await aiCallGeminiOnce(system,userMsg,apiKey,primary);
+  }catch(e){
+    // Clé invalide / quota dépassé : inutile d'aller plus loin
+    if(e.status===401 || e.status===403 || e.status===429) throw e;
+    // Modèle retiré/renommé (404, "no longer available", "Interactions API"...) :
+    // on découvre automatiquement le modèle actuellement disponible avec cette clé.
     try{
-      return await aiCallGeminiOnce(system,userMsg,apiKey,m);
-    }catch(e){
-      lastErr = e;
-      // Clé invalide / quota dépassé : inutile d'essayer d'autres modèles, on arrête tout de suite
-      if(e.status===401 || e.status===403 || e.status===429) throw e;
-      // Sinon (modèle retiré, renommé, "Interactions API"...) : on tente le modèle suivant
+      const models = await aiListGeminiModels(apiKey);
+      const best = pickBestGeminiModel(models);
+      if(!best || best===primary) throw e;
+      const result = await aiCallGeminiOnce(system,userMsg,apiKey,best);
+      // Auto-guérison : on mémorise ce modèle pour ne plus refaire l'appel de découverte la prochaine fois
+      AI_CONFIG.geminiModel = best;
+      saveAIConfig(AI_CONFIG);
+      toast(`ℹ️ Modèle Gemini mis à jour automatiquement : ${best}`);
+      return result;
+    }catch(e2){
+      throw e; // on relance l'erreur d'origine (plus parlante pour l'utilisateur) si la découverte échoue aussi
     }
   }
-  throw lastErr || new Error("Gemini : aucun modèle disponible");
 }
 
 async function aiCallOpenAI(system,userMsg,apiKey,model){
@@ -12431,7 +12470,7 @@ function openAiSettingsModal(){
   document.getElementById("aiClaudeKey").value = AI_CONFIG.claudeKey||"";
   document.getElementById("aiClaudeModel").value = AI_CONFIG.claudeModel||"claude-sonnet-4-5";
   document.getElementById("aiGeminiKey").value = AI_CONFIG.geminiKey||"";
-  document.getElementById("aiGeminiModel").value = AI_CONFIG.geminiModel||"gemini-2.5-flash";
+  document.getElementById("aiGeminiModel").value = AI_CONFIG.geminiModel||"gemini-flash-latest";
   document.getElementById("aiOpenaiKey").value = AI_CONFIG.openaiKey||"";
   document.getElementById("aiOpenaiModel").value = AI_CONFIG.openaiModel||"gpt-4o-mini";
   document.getElementById("aiSettingsStatus").textContent = "";
@@ -12443,7 +12482,7 @@ function saveAiSettingsFromModal(){
     claudeKey: document.getElementById("aiClaudeKey").value.trim(),
     claudeModel: document.getElementById("aiClaudeModel").value.trim()||"claude-sonnet-4-5",
     geminiKey: document.getElementById("aiGeminiKey").value.trim(),
-    geminiModel: document.getElementById("aiGeminiModel").value.trim()||"gemini-2.5-flash",
+    geminiModel: document.getElementById("aiGeminiModel").value.trim()||"gemini-flash-latest",
     openaiKey: document.getElementById("aiOpenaiKey").value.trim(),
     openaiModel: document.getElementById("aiOpenaiModel").value.trim()||"gpt-4o-mini",
     order: ["claude","gemini","openai"]
@@ -12454,13 +12493,243 @@ function saveAiSettingsFromModal(){
   renderMenuIA();
 }
 
+async function detectGeminiModel(){
+  const key = document.getElementById("aiGeminiKey").value.trim();
+  const statusEl = document.getElementById("aiGeminiDetectStatus");
+  const btn = document.getElementById("btnAiGeminiDetect");
+  if(!key){ statusEl.textContent = "⚠ Renseigne d'abord ta clé API Gemini ci-dessus."; statusEl.style.color="#c0392b"; return; }
+  btn.setAttribute("disabled","disabled");
+  statusEl.textContent = "⏳ Recherche du modèle disponible...";
+  statusEl.style.color = "#8a9487";
+  try{
+    const models = await aiListGeminiModels(key);
+    const best = pickBestGeminiModel(models);
+    if(!best) throw new Error("Aucun modèle compatible trouvé pour cette clé.");
+    document.getElementById("aiGeminiModel").value = best;
+    statusEl.textContent = `✓ Modèle détecté : ${best}`;
+    statusEl.style.color = "#37503f";
+  }catch(e){
+    statusEl.textContent = "❌ " + e.message;
+    statusEl.style.color = "#c0392b";
+  }finally{
+    btn.removeAttribute("disabled");
+  }
+}
+
 function initMenuIA(){
   document.getElementById("btnAiSettings")?.addEventListener("click", openAiSettingsModal);
+  document.getElementById("btnAiGeminiDetect")?.addEventListener("click", detectGeminiModel);
   document.getElementById("btnSaveAiSettings")?.addEventListener("click", saveAiSettingsFromModal);
   document.getElementById("btnMenuiaGenerate")?.addEventListener("click", generateMenuIA);
   document.getElementById("btnMenuiaRegenerate")?.addEventListener("click", generateMenuIA);
   document.getElementById("btnMenuiaSave")?.addEventListener("click", saveMenuiaPlan);
   document.getElementById("btnMenuiaPdf")?.addEventListener("click", exportMenuiaPdf);
+}
+
+/* =========================================================
+   IA INTÉGRÉE AU PROGRAMME SEMAINE — génère directement dans
+   c.program (même structure que le générateur algorithmique et
+   la saisie manuelle), pour rester éditable normalement ensuite :
+   drag&drop, verrouillage, échange d'aliment, grammage, etc.
+   ========================================================= */
+
+/* Base d'aliments envoyée à l'IA, AVEC l'id exact de chaque aliment.
+   L'IA doit obligatoirement renvoyer cet id tel quel : l'app recalcule
+   ensuite elle-même les kcal/macros depuis la base (jamais celles
+   éventuellement halluciné par l'IA), donc aucune dérive possible. */
+function programGatherFoodsWithIds(c, scope){
+  const excluded = new Set((c.prefs&&c.prefs.excluded)||[]);
+  let pool = DB.foods.filter(f=>!excluded.has(f.id));
+  if(scope==="liked"){
+    const liked = new Set((c.prefs&&c.prefs.liked)||[]);
+    const likedPool = pool.filter(f=>liked.has(f.id));
+    if(likedPool.length>=8) pool = likedPool;
+  }
+  return pool.slice(0,240).map(f=>({
+    id:f.id, nom:f.name, categorie:f.cat||"",
+    kcal_100g:n0(f.kcal), proteines_100g:n0(f.prot), glucides_100g:n0(f.gluc), lipides_100g:n0(f.lip)
+  }));
+}
+
+/* Calcule, pour un jour donné, les macros déjà "verrouillées" (repas ou items 🔒)
+   et la liste des repas restant à générer — pour ne jamais toucher au verrouillé. */
+function programAiLockedInfo(c, d){
+  const meals = getMeals(c);
+  const prog = (c.program && c.program[d]) ? c.program[d] : {};
+  let lockedKcal=0, lockedProt=0, lockedGluc=0, lockedLip=0;
+  const lockedMeals = new Set();
+  meals.forEach(m=>{
+    const items = prog[m.id]||[];
+    const isLocked = items.some(it=>it&&it._locked);
+    const isMealLocked = prog[m.id] && prog[m.id]._mealLocked;
+    if(isLocked || isMealLocked){
+      lockedMeals.add(m.id);
+      items.forEach(it=>{
+        if(!it||!it.base) return;
+        const mm = itemMacros(it);
+        lockedKcal+=mm.kcal; lockedProt+=mm.prot; lockedGluc+=mm.gluc; lockedLip+=mm.lip;
+      });
+    }
+  });
+  const lockedEcarts = ((c.ecarts&&c.ecarts[d])||[]).filter(e=>e&&e._locked);
+  lockedEcarts.forEach(e=>{ lockedKcal+=n0(e.kcal); });
+  const mealsToGen = meals.filter(m=>!lockedMeals.has(m.id));
+  return { lockedKcal,lockedProt,lockedGluc,lockedLip, mealsToGen };
+}
+
+function buildProgrammeAIPrompt(c, dayIndices, opts){
+  const mac = effectiveMacros(c);
+  const tgt = targetKcal(c);
+  const foods = programGatherFoodsWithIds(c, opts.foodScope||"liked");
+  const excludedNames = DB.foods.filter(f=>((c.prefs&&c.prefs.excluded)||[]).includes(f.id)).map(f=>f.name);
+  const allergies = (c.profile&&c.profile.allergies)||[];
+  const goalLbl = menuiaGoalLabel(c);
+
+  const daysInfo = dayIndices.map(d=>{
+    const info = programAiLockedInfo(c,d);
+    if(!info.mealsToGen.length) return null;
+    return {
+      day_index: d,
+      jour: DAYS_FULL[d],
+      repas_a_generer: info.mealsToGen.map(m=>({id:m.id, nom:m.label, part_energie_pct:m.pct})),
+      cible_kcal: Math.round(Math.max(0, tgt - info.lockedKcal)),
+      cible_proteines: Math.round(Math.max(0, mac.prot - info.lockedProt)),
+      cible_glucides: Math.round(Math.max(0, mac.gluc - info.lockedGluc)),
+      cible_lipides: Math.round(Math.max(0, mac.lip - info.lockedLip)),
+    };
+  }).filter(Boolean);
+
+  const system = `Tu es un(e) diététicien(ne)-nutritionniste expert(e), assistant(e) d'un coach sportif francophone. Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte ni markdown autour. Respecte STRICTEMENT le schéma demandé.
+
+RÈGLES ABSOLUES :
+1. Pour chaque aliment choisi, tu DOIS utiliser le champ "id" EXACT fourni dans la liste "aliments disponibles" (recopié tel quel, jamais inventé, jamais modifié). N'utilise QUE des aliments de cette liste.
+2. N'utilise JAMAIS un aliment lié aux allergies ou exclusions listées.
+3. Pour chaque jour, ne génère QUE les repas listés dans "repas_a_generer" (les autres repas de la journée sont déjà remplis et verrouillés par le coach — n'en parle pas).
+4. Le total kcal/macros de chaque jour (somme des repas générés) doit approcher au mieux "cible_kcal"/"cible_proteines"/"cible_glucides"/"cible_lipides" (écart max ±8%).
+5. Grammages réalistes, arrondis à 5g près.
+6. Tu n'as PAS besoin de calculer kcal/macros par aliment : l'application les recalcule elle-même depuis sa base de données à partir de l'id et du grammage. Renvoie uniquement "foodId" et "grammes".`;
+
+  const userMsg = `Génère le contenu des repas manquants pour ce client, jour par jour.
+
+CLIENT :
+- Objectif : ${goalLbl}
+- Allergies (interdit) : ${allergies.length?allergies.join(", "):"aucune"}
+- Aliments exclus (interdit) : ${excludedNames.length?excludedNames.join(", "):"aucun"}
+${opts.instructions ? "- Consignes du coach : "+opts.instructions : ""}
+
+JOURS À GÉNÉRER (uniquement les repas listés dans repas_a_generer pour chacun) :
+${JSON.stringify(daysInfo)}
+
+ALIMENTS DISPONIBLES (utilise UNIQUEMENT ces id) :
+${JSON.stringify(foods)}
+
+Réponds avec UNIQUEMENT ce JSON :
+{
+  "days": [
+    {
+      "day_index": 0,
+      "meals": { "petitdej": [ {"foodId":"id_exact","grammes":80} ], "dejeuner": [ {"foodId":"id_exact","grammes":150} ] }
+    }
+  ]
+}`;
+
+  return { system, user: userMsg, daysInfo };
+}
+
+async function runProgrammeAI(dayIndices, opts){
+  const c = client();
+  if(!c){ toast("Aucun client"); return; }
+
+  const statusEl = document.getElementById("progAiStatus");
+  const btnWeek = document.getElementById("btnGenWeekAI");
+  const btnDay = document.getElementById("btnGenDayAI");
+  const setBusy = busy=>{ [btnWeek,btnDay].forEach(b=>{ if(b) b.disabled = busy; }); };
+
+  const { system, user, daysInfo } = buildProgrammeAIPrompt(c, dayIndices, opts);
+  if(!daysInfo.length){
+    toast("🔒 Tous les repas concernés sont verrouillés — rien à générer.");
+    return;
+  }
+
+  setBusy(true);
+  statusEl.classList.remove("hidden");
+  statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
+  statusEl.textContent = "⏳ Génération du programme via IA (10-30s)...";
+
+  try{
+    const { raw, provider } = await callAI(system, user);
+    const parsed = aiParseJson(raw);
+    if(!parsed || !Array.isArray(parsed.days) || !parsed.days.length){
+      throw new Error("La réponse IA ne contient pas de programme exploitable.");
+    }
+
+    pushUndo(dayIndices.length>1 ? "Génération semaine (IA)" : "Génération jour (IA)");
+
+    let itemsApplied=0, itemsSkipped=0;
+    parsed.days.forEach(pd=>{
+      const d = Number(pd.day_index);
+      const info = daysInfo.find(di=>di.day_index===d);
+      if(!info) return; // jour non demandé : ignoré par sécurité
+      const allowedMealIds = new Set(info.repas_a_generer.map(m=>m.id));
+      if(!c.program[d]) c.program[d] = {};
+      Object.entries(pd.meals||{}).forEach(([mealId, arr])=>{
+        if(!allowedMealIds.has(mealId)) return; // jamais toucher à un repas verrouillé ou non demandé
+        const items = (Array.isArray(arr)?arr:[]).map(a=>{
+          const f = DB.foods.find(x=>x.id===a.foodId);
+          if(!f){ itemsSkipped++; return null; }
+          itemsApplied++;
+          const uw = f.unitWeight || getUnitWeight(f.name) || null;
+          const grams = Math.max(5, Math.round(n0(a.grammes!==undefined?a.grammes:a.grams)/5)*5);
+          return {
+            foodId:f.id, name:f.name, cat:f.cat, grams, unitWeight:uw,
+            base:{ kcal:n0(f.kcal), prot:n0(f.prot), gluc:n0(f.gluc), lip:n0(f.lip) },
+            _generated:true, _locked:false
+          };
+        }).filter(Boolean);
+        c.program[d][mealId] = items;
+      });
+    });
+
+    save();
+    renderProgram(); renderRemaining();
+
+    const provLbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[provider]||provider;
+    statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
+    statusEl.textContent = `✓ Programme généré via ${provLbl} · ${itemsApplied} aliment(s) placé(s)${itemsSkipped?` · ${itemsSkipped} ignoré(s) (non reconnus)`:""}`;
+    toast("✓ Programme IA appliqué — modifiable normalement");
+  }catch(e){
+    console.error(e);
+    statusEl.style.background = "#fdecea"; statusEl.style.color = "#c0392b";
+    statusEl.textContent = "❌ " + e.message;
+  }finally{
+    setBusy(false);
+  }
+}
+
+async function generateWeekAI(){
+  const c = client(); if(!c){ toast("Aucun client"); return; }
+  if(!(c.prefs&&c.prefs.liked&&c.prefs.liked.length)){
+    alert("Ce client n'a aucun aliment dans ses préférences.\n\nAllez dans l'onglet \"Préférences\" et sélectionnez les aliments qu'il aime, puis réessayez.");
+    goTo("prefs");
+    return;
+  }
+  if(!confirm("Générer le programme des 7 jours via IA ?\n(Les repas verrouillés 🔒 sont conservés)")) return;
+  await runProgrammeAI([0,1,2,3,4,5,6], { foodScope:"liked" });
+}
+
+async function generateDayAI(){
+  const c = client(); if(!c){ toast("Aucun client"); return; }
+  if(!(c.prefs&&c.prefs.liked&&c.prefs.liked.length)){
+    alert("Ce client n'a aucun aliment dans ses préférences.\n\nAllez dans l'onglet \"Préférences\" et sélectionnez les aliments qu'il aime, puis réessayez.");
+    goTo("prefs");
+    return;
+  }
+  await runProgrammeAI([activeDay], { foodScope:"liked" });
+}
+
+function initProgrammeAI(){
+  document.getElementById("btnGenWeekAI")?.addEventListener("click", generateWeekAI);
+  document.getElementById("btnGenDayAI")?.addEventListener("click", generateDayAI);
 }
 
 </script>
