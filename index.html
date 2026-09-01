@@ -9452,17 +9452,19 @@ const JT_BADGE_CSS = {
 
 function jt_r5(n){ return Math.round(n/5)*5; } // arrondi au multiple de 5
 
-// Mots-clés de catégorie d'aliment (DB.foods[].cat, en minuscules) correspondant à chaque
-// catégorie de slot de la journée type. Sert à ne proposer par défaut QUE les aliments
-// aimés du client dans chaque slot.
+// Mots-clés de catégorie d'aliment (DB.foods[].cat) correspondant à chaque catégorie de
+// slot de la journée type. Sert à ne proposer par défaut QUE les aliments aimés du client
+// dans chaque slot. Mots-clés au SINGULIER (comparaison insensible aux accents/casse via
+// noAccent) pour matcher aussi bien "Viande" que "Viandes", "Viande rouge", etc. — même
+// logique que foodRole() utilisée par le générateur du Programme.
 const JT_CAT_FOODCATS = {
-  prot:  ["viandes","poissons","œufs","oeufs","charcuterie","fruits de mer","protéines végétales","proteines vegetales","abats"],
-  fecu:  ["féculents","feculents","pains","céréales","cereales","légumineuses","legumineuses"],
-  legum: ["légumes","legumes"],
-  laita: ["laitages","boissons végétales","boissons vegetales","fromages"],
-  fruit: ["fruits"],
-  lipid: ["oléagineux","oleagineux","graines","matières grasses","matieres grasses","lipides"], // slot petit-déj "Oléagineux / beurre"
-  compl: ["compléments","complements"],
+  prot:  ["viande","poisson","œuf","oeuf","charcuterie","fruits de mer","proteine vegetale","abat"],
+  fecu:  ["feculent","pain","cereale","legumineuse"],
+  legum: ["legume"],
+  laita: ["laitage","boisson vegetale","fromage"],
+  fruit: ["fruit"],
+  lipid: ["oleagineux","graine","matiere grasse","lipide"], // slot petit-déj "Oléagineux / beurre"
+  compl: ["complement"],
 };
 // Cas particulier du cat "mg" (deux usages différents du même badge visuel) :
 // - matière grasse de cuisson (huile, beurre)  → catégorie "Matières grasses" / "Lipides"
@@ -9470,7 +9472,7 @@ const JT_CAT_FOODCATS = {
 //   dans la base les huiles sont classées "Lipides"/"Matières grasses", la même catégorie
 //   que le beurre, donc on les repère aussi par leur nom pour qu'elles apparaissent ici)
 function jtFoodCatsForSlot(s){
-  if(s.cat==="mg") return s.isDefaultGoodFat ? ["oléagineux","oleagineux","graines"] : ["matières grasses","matieres grasses","lipides"];
+  if(s.cat==="mg") return s.isDefaultGoodFat ? ["oleagineux","graine"] : ["matiere grasse","lipide"];
   return JT_CAT_FOODCATS[s.cat] || [];
 }
 
@@ -9486,8 +9488,8 @@ function jtLikedOptionsForSlot(c, s){
   const isComplSlot  = s.cat==="compl";
   const found = (DB.foods||[]).filter(f=>{
     if(!f || !likedIds.has(f.id) || excludedIds.has(f.id)) return false;
-    const catLower  = (f.cat||"").toLowerCase();
-    const nameLower = (f.name||"").toLowerCase();
+    const catLower  = noAccent((f.cat||"").toLowerCase());
+    const nameLower = noAccent((f.name||"").toLowerCase());
     if(catKeywords.some(k=>catLower.includes(k))) return true;
     if(isGoodFat){
       // Aliments "bons lipides" repérables par leur nom même hors catégorie Oléagineux :
