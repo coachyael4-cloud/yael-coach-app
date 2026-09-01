@@ -1143,6 +1143,9 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3 19 12 5 21V3Z"/></svg>
             Générer
           </button>
+          <button id="btnGenererJourneeAI" class="btn btn-ghost flex items-center gap-2 text-sm" style="border-color:#c9d6cd;background:#f3f7f3;" title="L'IA choisit les slots et curate la rotation d'aliments aimés de chaque repas">
+            🤖 Générer via IA
+          </button>
           <button id="btnExportJourneeExcel" class="btn btn-ghost flex items-center gap-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6h6v6m2 4H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/></svg>
             Exporter Excel
@@ -1190,6 +1193,8 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
 
       <!-- Résumé macros client -->
       <div id="journeeMacroBar" class="hidden grid grid-cols-4 gap-3 mb-6"></div>
+
+      <div id="jtAiStatus" class="hidden text-xs px-3 py-2 rounded-lg mb-4"></div>
 
       <!-- Panneau suivi macros JT (barres de progression) -->
       <div id="jtSuiviWrap" class="hidden mb-5">
@@ -8995,6 +9000,7 @@ function init(){
   initCalculette();
   initMenuIA();
   initProgrammeAI();
+  initJourneeTypeAI();
   initSuivi();
   document.getElementById("btnEcart").addEventListener("click",addEcart);
   document.getElementById("ecartKcal").addEventListener("keydown",e=>{ if(e.key==="Enter") addEcart(); });
@@ -12730,6 +12736,229 @@ async function generateDayAI(){
 function initProgrammeAI(){
   document.getElementById("btnGenWeekAI")?.addEventListener("click", generateWeekAI);
   document.getElementById("btnGenDayAI")?.addEventListener("click", generateDayAI);
+}
+
+/* =========================================================
+   IA INTÉGRÉE À LA JOURNÉE TYPE — la journée type est un GABARIT
+   (pas 7 jours concrets) : chaque repas est découpé en slots par
+   rôle nutritionnel (Protéines, Glucides, Légumes...), chaque slot
+   affichant une ROTATION de plusieurs aliments aimés interchangeables,
+   avec un grammage calculé automatiquement par l'app.
+
+   L'IA ne choisit donc PAS un aliment + un grammage (comme pour le
+   Programme), elle configure la STRUCTURE : quels slots par repas
+   (ajout/suppression) et quels aliments doivent rester dans la
+   rotation proposée de chaque slot (curation parmi les aimés du
+   client — jamais d'invention). Tout reste ensuite éditable via
+   l'interface normale (ajouter/retirer un slot, changer d'aliment
+   dans la rotation, fixer un grammage manuel, etc.). */
+
+// Reproduit EXACTEMENT la construction des slots par défaut faite dans
+// buildJourneeType (avant extraSlots/removedSlots du coach), pour que
+// les origIdx envoyés à l'IA correspondent aux vrais indices utilisés
+// par l'app pour les clés de stockage (removedSlots, removedOptions...).
+function jtComputeBaseSlots(mealId){
+  let baseSlots = (JT_SLOTS[mealId] || []).slice();
+  if((mealId==="dejeuner"||mealId==="diner") && !baseSlots.some(s=>s.isDefaultCookFat)){
+    const protIdx = baseSlots.findIndex(s=>s.cat==="prot");
+    baseSlots.splice(protIdx>=0 ? protIdx+1 : baseSlots.length, 0, JT_LIPID_SLOT);
+  }
+  const _legumIdx = baseSlots.findIndex(s=>s.cat==="legum");
+  if(_legumIdx>=0 && !baseSlots.some(s=>s.isDefaultGoodFat)){
+    baseSlots.splice(_legumIdx+1, 0, JT_GOODFAT_SLOT);
+  }
+  return baseSlots;
+}
+
+const JT_AI_EXTRA_CATS = {
+  fecu:  "Glucides / féculents",
+  laita: "Laitage",
+  fruit: "Fruit",
+  lipid: "Oléagineux / beurre",
+  compl: "Protéine / Whey",
+  prot:  "Protéines (viande, poisson, oeufs...)",
+  legum: "Légumes",
+  mg:    "Bons lipides (huile, avocat, oléagineux)",
+};
+
+const JT_AI_GOAL_LABELS = {
+  reequilibrage:"Rééquilibrage alimentaire",
+  seche:"Sèche / perte de masse grasse",
+  masse:"Prise de masse musculaire",
+  maintien:"Maintien"
+};
+
+function buildJourneeTypeAIPrompt(c, opts){
+  const _sel = jtObjectifSelValue(c);
+  const tgt  = jtTargetKcal(c, _sel);
+  const mac  = effectiveMacros(c);
+  const nm    = Math.min(5, Math.max(3, Number(c.mealCount)||4));
+  const meals = JT_MEAL_DIST[nm] || JT_MEAL_DIST[4];
+  const excludedNames = DB.foods.filter(f=>((c.prefs&&c.prefs.excluded)||[]).includes(f.id)).map(f=>f.name);
+  const allergies = (c.profile&&c.profile.allergies)||[];
+  const goalLbl = JT_AI_GOAL_LABELS[_sel] || _sel;
+
+  const mealsInfo = meals.map(m=>{
+    const baseSlots = jtComputeBaseSlots(m.id);
+    const slots = baseSlots.map((s,idx)=>({
+      origIdx: idx,
+      cat: s.cat,
+      label: s.label,
+      liked_options: jtLikedOptionsForSlot(c, s).filter(o=>!o._placeholder).map(o=>o.name)
+    }));
+    return {
+      mealId: m.id,
+      label: m.label,
+      part_energie_pct: Math.round(m.pct*100),
+      cible_kcal: Math.round(tgt*m.pct),
+      cible_proteines: Math.round(mac.prot*m.pct),
+      cible_glucides: Math.round(mac.gluc*m.pct),
+      cible_lipides: Math.round(mac.lip*m.pct),
+      slots
+    };
+  });
+
+  const system = `Tu es un(e) diététicien(ne)-nutritionniste expert(e), assistant(e) d'un coach sportif francophone. Tu configures une "Journée type" : un GABARIT de journée réutilisable, pas un menu figé jour par jour.
+
+Chaque repas est découpé en "slots" par rôle nutritionnel (Protéines, Glucides, Légumes, Laitage, Fruit, etc). Chaque slot affiche une ROTATION de plusieurs aliments interchangeables (déjà filtrés parmi les aliments aimés du client) — PAS un seul aliment fixe. Le grammage de chaque slot est calculé automatiquement par l'application ensuite, tu n'as pas à t'en occuper.
+
+Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte ni markdown autour.
+
+TON RÔLE, pour chaque repas :
+1. "slots_to_remove" : les slots (par origIdx fourni) à supprimer entièrement, seulement si ça a vraiment du sens pour ce client/repas (ex: pas de fruit au dîner en sèche stricte). Reste minimaliste.
+2. "slots_options_to_remove" : pour chaque slot (par origIdx en clé), les noms d'aliments à retirer de sa rotation — UNIQUEMENT parmi les noms EXACTS listés dans "liked_options" de ce slot, jamais un nom inventé ou reformulé. But : garder une rotation cohérente (éviter des aliments redondants ou peu adaptés au moment du repas), sans nécessairement tout retirer.
+3. "extra_slots" : des slots supplémentaires à ajouter à ce repas si pertinent (catégorie parmi celles listées), rarement plus d'un par repas.
+
+RÈGLES ABSOLUES :
+- N'utilise/ne mentionne jamais un aliment lié à une allergie ou exclusion.
+- Ne retire JAMAIS tous les aliments d'un slot que tu ne supprimes pas entièrement (garde au moins un nom).
+- Reste sobre : la plupart des slots par défaut sont déjà bien conçus, n'interviens que là où ça améliore vraiment la cohérence pour ce client précis.`;
+
+  const userMsg = `Configure la journée type de ce client.
+
+CLIENT :
+- Objectif : ${goalLbl}
+- Cible calorique quotidienne : ${Math.round(tgt)} kcal
+- Allergies (interdit) : ${allergies.length?allergies.join(", "):"aucune"}
+- Aliments exclus (interdit) : ${excludedNames.length?excludedNames.join(", "):"aucun"}
+${opts.instructions ? "- Consignes du coach : "+opts.instructions : ""}
+
+CATÉGORIES DE SLOTS DISPONIBLES POUR "extra_slots" :
+${JSON.stringify(JT_AI_EXTRA_CATS)}
+
+REPAS ET SLOTS ACTUELS :
+${JSON.stringify(mealsInfo)}
+
+Réponds avec UNIQUEMENT ce JSON :
+{
+  "meals": [
+    {
+      "mealId": "petitdej",
+      "slots_to_remove": [],
+      "slots_options_to_remove": { "0": ["Nom aliment à retirer"] },
+      "extra_slots": [{"cat":"legum"}]
+    }
+  ],
+  "conseils": "2 à 3 phrases de conseils courts pour ce client"
+}`;
+
+  return { system, user: userMsg, mealsInfo };
+}
+
+async function generateJourneeTypeAI(){
+  const c = client();
+  if(!c){ toast("Aucun client"); return; }
+  if(!(c.prefs && c.prefs.liked && c.prefs.liked.length)){
+    alert("Ce client n'a aucun aliment dans ses préférences.\n\nAllez dans l'onglet \"Préférences\" et sélectionnez les aliments qu'il aime, puis réessayez.");
+    goTo("prefs");
+    return;
+  }
+  if(!confirm("Configurer la journée type via IA ?\n\nToutes tes modifications manuelles actuelles (slots ajoutés/retirés, rotations personnalisées...) seront remplacées par la proposition de l'IA.")) return;
+
+  const statusEl = document.getElementById("jtAiStatus");
+  const btn = document.getElementById("btnGenererJourneeAI");
+  btn.disabled = true;
+  statusEl.classList.remove("hidden");
+  statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
+  statusEl.textContent = "⏳ Configuration de la journée type via IA (10-30s)...";
+
+  try{
+    const { system, user, mealsInfo } = buildJourneeTypeAIPrompt(c, {});
+    const { raw, provider } = await callAI(system, user);
+    const parsed = aiParseJson(raw);
+    if(!parsed || !Array.isArray(parsed.meals)) throw new Error("Réponse IA inexploitable.");
+
+    pushUndo("Génération journée type (IA)");
+
+    // Reset complet (même structure vide que resetJourneeType), puis
+    // application de la proposition IA par-dessus.
+    c.journeeType = {
+      slots:{}, removedSlots:{}, extraSlots:{}, slotOptions:{},
+      slotTargets:{}, customOptions:{}, removedOptions:{},
+      disabledMeals:[], slotNotes:{}
+    };
+
+    let removedCount=0, curatedCount=0, extraCount=0;
+    const ALLOWED_CATS = new Set(Object.keys(JT_AI_EXTRA_CATS));
+
+    parsed.meals.forEach(pm=>{
+      const info = mealsInfo.find(mi=>mi.mealId===pm.mealId);
+      if(!info) return;
+      const validIdx = new Set(info.slots.map(s=>s.origIdx));
+
+      // 1) Slots à retirer entièrement
+      const toRemove = (Array.isArray(pm.slots_to_remove)?pm.slots_to_remove:[])
+        .map(Number).filter(i=>validIdx.has(i));
+      if(toRemove.length){
+        c.journeeType.removedSlots[pm.mealId] = toRemove;
+        removedCount += toRemove.length;
+      }
+
+      // 2) Curation des rotations d'aliments (jamais un nom hors liste fournie)
+      if(pm.slots_options_to_remove && typeof pm.slots_options_to_remove==="object"){
+        Object.entries(pm.slots_options_to_remove).forEach(([idxStr, names])=>{
+          const idx = Number(idxStr);
+          if(!validIdx.has(idx) || toRemove.includes(idx)) return;
+          const slotInfo = info.slots.find(s=>s.origIdx===idx);
+          if(!slotInfo) return;
+          const validNames = new Set(slotInfo.liked_options);
+          const namesToRemove = (Array.isArray(names)?names:[]).filter(n=>validNames.has(n));
+          // Sécurité : ne jamais vider complètement un slot
+          if(namesToRemove.length && namesToRemove.length < slotInfo.liked_options.length){
+            const slotKey = pm.mealId+"_"+idx;
+            c.journeeType.removedOptions[slotKey] = namesToRemove;
+            curatedCount += namesToRemove.length;
+          }
+        });
+      }
+
+      // 3) Slots supplémentaires
+      const extras = (Array.isArray(pm.extra_slots)?pm.extra_slots:[])
+        .filter(e=>e && ALLOWED_CATS.has(e.cat)).map(e=>({cat:e.cat}));
+      if(extras.length){
+        c.journeeType.extraSlots[pm.mealId] = extras;
+        extraCount += extras.length;
+      }
+    });
+
+    save();
+    renderJourneeType();
+
+    const provLbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[provider]||provider;
+    statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
+    statusEl.textContent = `✓ Journée type configurée via ${provLbl} · ${extraCount} slot(s) ajouté(s) · ${removedCount} retiré(s) · ${curatedCount} option(s) curatée(s)`;
+    toast("✓ Journée type générée via IA — modifiable normalement");
+  }catch(e){
+    console.error(e);
+    statusEl.style.background = "#fdecea"; statusEl.style.color = "#c0392b";
+    statusEl.textContent = "❌ " + e.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function initJourneeTypeAI(){
+  document.getElementById("btnGenererJourneeAI")?.addEventListener("click", generateJourneeTypeAI);
 }
 
 </script>
