@@ -9458,7 +9458,7 @@ function jt_r5(n){ return Math.round(n/5)*5; } // arrondi au multiple de 5
 // noAccent) pour matcher aussi bien "Viande" que "Viandes", "Viande rouge", etc. — même
 // logique que foodRole() utilisée par le générateur du Programme.
 const JT_CAT_FOODCATS = {
-  prot:  ["viande","poisson","œuf","oeuf","charcuterie","fruits de mer","proteine vegetale","abat"],
+  prot:  ["proteine","viande","poisson","œuf","oeuf","charcuterie","fruits de mer","abat"],
   fecu:  ["feculent","pain","cereale","legumineuse"],
   legum: ["legume"],
   laita: ["laitage","boisson vegetale","fromage"],
@@ -9490,7 +9490,9 @@ function jtLikedOptionsForSlot(c, s){
     if(!f || !likedIds.has(f.id) || excludedIds.has(f.id)) return false;
     const catLower  = noAccent((f.cat||"").toLowerCase());
     const nameLower = noAccent((f.name||"").toLowerCase());
-    if(catKeywords.some(k=>catLower.includes(k))) return true;
+    // Comparaison mot par mot (pas phrase exacte) : couvre aussi bien "Matière grasse"
+    // que "Matières grasses", "Boisson végétale" que "Boissons végétales", etc.
+    if(catKeywords.some(k=>k.split(" ").every(w=>catLower.includes(w)))) return true;
     if(isGoodFat){
       // Aliments "bons lipides" repérables par leur nom même hors catégorie Oléagineux :
       // avocat, et les huiles véritables (nom qui COMMENCE par "huile", pour ne pas
