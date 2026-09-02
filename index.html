@@ -828,10 +828,30 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z"/></svg>
                 Portail client
               </button>
+              <button id="btnToggleProgChat" class="btn btn-ghost text-[.82rem]" style="border-color:#c9d6cd;background:#f3f7f3;">
+                💬 Assistant IA
+              </button>
             </div>
           </div>
 
           <div id="progAiStatus" class="hidden text-xs px-3 py-2 rounded-lg"></div>
+
+          <div id="progChatPanel" class="hidden card card-pad mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <p class="font-semibold text-sm">💬 Assistant IA — Programme</p>
+              <button id="btnClearProgChat" class="text-xs" style="color:#8a9487;">Effacer la conversation</button>
+            </div>
+            <p class="text-xs mb-2" style="color:#8a9487">
+              Deux choses possibles ici : <strong>copier</strong> un repas vers un autre, ou <strong>régénérer</strong> un repas avec des consignes. Clique un exemple ou écris le tien :
+            </p>
+            <div id="progChatExamples" class="flex flex-wrap gap-1.5 mb-3"></div>
+            <div id="progChatMessages" class="space-y-3 mb-3" style="max-height:340px;overflow-y:auto;"></div>
+            <div class="flex gap-2 items-end">
+              <textarea id="progChatInput" class="fld flex-1" rows="2" placeholder="Écris ton instruction..."></textarea>
+              <button id="btnProgChatSend" class="btn btn-primary text-sm">Envoyer</button>
+            </div>
+            <div id="progChatLoading" class="hidden text-xs mt-2" style="color:#8a9487">⏳ L'IA réfléchit...</div>
+          </div>
 
           <div id="mealsContainer" class="space-y-4"><!-- rendu JS --></div>
 
@@ -1171,6 +1191,9 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z"/></svg>
             Portail client
           </button>
+          <button id="btnToggleJtChat" class="btn btn-ghost flex items-center gap-2" style="border-color:#c9d6cd;background:#f3f7f3;">
+            💬 Assistant IA
+          </button>
         </div>
       </div>
 
@@ -1195,6 +1218,23 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
       <div id="journeeMacroBar" class="hidden grid grid-cols-4 gap-3 mb-6"></div>
 
       <div id="jtAiStatus" class="hidden text-xs px-3 py-2 rounded-lg mb-4"></div>
+
+      <div id="jtChatPanel" class="hidden card card-pad mb-5">
+        <div class="flex items-center justify-between mb-2">
+          <p class="font-semibold text-sm">💬 Assistant IA — Journée type</p>
+          <button id="btnClearJtChat" class="text-xs" style="color:#8a9487;">Effacer la conversation</button>
+        </div>
+        <p class="text-xs mb-2" style="color:#8a9487">
+          Deux choses possibles ici : <strong>ajouter/retirer un slot</strong>, ou <strong>changer la rotation d'aliments</strong> d'un slot. Clique un exemple ou écris le tien :
+        </p>
+        <div id="jtChatExamples" class="flex flex-wrap gap-1.5 mb-3"></div>
+        <div id="jtChatMessages" class="space-y-3 mb-3" style="max-height:340px;overflow-y:auto;"></div>
+        <div class="flex gap-2 items-end">
+          <textarea id="jtChatInput" class="fld flex-1" rows="2" placeholder="Écris ton instruction..."></textarea>
+          <button id="btnJtChatSend" class="btn btn-primary text-sm">Envoyer</button>
+        </div>
+        <div id="jtChatLoading" class="hidden text-xs mt-2" style="color:#8a9487">⏳ L'IA réfléchit...</div>
+      </div>
 
       <!-- Panneau suivi macros JT (barres de progression) -->
       <div id="jtSuiviWrap" class="hidden mb-5">
@@ -9001,6 +9041,7 @@ function init(){
   initMenuIA();
   initProgrammeAI();
   initJourneeTypeAI();
+  initAiChats();
   initSuivi();
   document.getElementById("btnEcart").addEventListener("click",addEcart);
   document.getElementById("ecartKcal").addEventListener("keydown",e=>{ if(e.key==="Enter") addEcart(); });
@@ -12563,7 +12604,7 @@ function programGatherFoodsWithIds(c, scope){
 
 /* Calcule, pour un jour donné, les macros déjà "verrouillées" (repas ou items 🔒)
    et la liste des repas restant à générer — pour ne jamais toucher au verrouillé. */
-function programAiLockedInfo(c, d){
+function programAiLockedInfo(c, d, mealFilter){
   const meals = getMeals(c);
   const prog = (c.program && c.program[d]) ? c.program[d] : {};
   let lockedKcal=0, lockedProt=0, lockedGluc=0, lockedLip=0;
@@ -12583,7 +12624,11 @@ function programAiLockedInfo(c, d){
   });
   const lockedEcarts = ((c.ecarts&&c.ecarts[d])||[]).filter(e=>e&&e._locked);
   lockedEcarts.forEach(e=>{ lockedKcal+=n0(e.kcal); });
-  const mealsToGen = meals.filter(m=>!lockedMeals.has(m.id));
+  let mealsToGen = meals.filter(m=>!lockedMeals.has(m.id));
+  if(Array.isArray(mealFilter) && mealFilter.length){
+    const allowed = new Set(mealFilter);
+    mealsToGen = mealsToGen.filter(m=>allowed.has(m.id));
+  }
   return { lockedKcal,lockedProt,lockedGluc,lockedLip, mealsToGen };
 }
 
@@ -12596,7 +12641,7 @@ function buildProgrammeAIPrompt(c, dayIndices, opts){
   const goalLbl = menuiaGoalLabel(c);
 
   const daysInfo = dayIndices.map(d=>{
-    const info = programAiLockedInfo(c,d);
+    const info = programAiLockedInfo(c,d,opts.mealFilter);
     if(!info.mealsToGen.length) return null;
     return {
       day_index: d,
@@ -12707,10 +12752,12 @@ async function runProgrammeAI(dayIndices, opts){
     statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
     statusEl.textContent = `✓ Programme généré via ${provLbl} · ${itemsApplied} aliment(s) placé(s)${itemsSkipped?` · ${itemsSkipped} ignoré(s) (non reconnus)`:""}`;
     toast("✓ Programme IA appliqué — modifiable normalement");
+    return { itemsApplied, itemsSkipped, daysCount: daysInfo.length, provider };
   }catch(e){
     console.error(e);
     statusEl.style.background = "#fdecea"; statusEl.style.color = "#c0392b";
     statusEl.textContent = "❌ " + e.message;
+    throw e;
   }finally{
     setBusy(false);
   }
@@ -12963,6 +13010,422 @@ async function generateJourneeTypeAI(){
 
 function initJourneeTypeAI(){
   document.getElementById("btnGenererJourneeAI")?.addEventListener("click", generateJourneeTypeAI);
+}
+
+/* =========================================================
+   CHATS IA — Programme & Journée type
+   Deux chats séparés, historique persistant par client
+   (c.aiChatProgram / c.aiChatJournee). Chaque tour envoie l'état
+   actuel des données + l'historique + le nouveau message à l'IA,
+   qui répond avec un texte + une liste d'actions limitées et
+   sûres (copier un repas, régénérer, ajuster un slot) — jamais
+   une réécriture libre des données.
+   ========================================================= */
+
+function aiChatEnsure(c){
+  if(!Array.isArray(c.aiChatProgram)) c.aiChatProgram = [];
+  if(!Array.isArray(c.aiChatJournee)) c.aiChatJournee = [];
+}
+
+function aiChatHistoryForPrompt(arr){
+  // Les 16 derniers messages suffisent pour le contexte, sans faire exploser le prompt
+  return arr.slice(-16).map(m=>`${m.role==="user"?"Coach":"Assistant"} : ${m.text}`).join("\n");
+}
+
+function renderAiChatMessages(containerId, arr){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(!arr.length){
+    el.innerHTML = `<p class="text-xs" style="color:#aab2a6">Aucun message pour l'instant — écris ta première instruction ci-dessous.</p>`;
+  } else {
+    el.innerHTML = arr.map(m=>{
+      const isUser = m.role==="user";
+      return `<div class="flex ${isUser?"justify-end":"justify-start"}">
+        <div class="text-sm rounded-2xl px-3 py-2" style="max-width:85%;white-space:pre-wrap;background:${isUser?"#37503f":"#eef3ef"};color:${isUser?"#fff":"#2a332a"}">${esc(m.text)}</div>
+      </div>`;
+    }).join("");
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ---------- Chat Programme ---------- */
+
+function programSummaryForAI(c){
+  const meals = getMeals(c);
+  return DAYS_FULL.map((jour,d)=>{
+    const dayObj = { day_index:d, jour, repas:{} };
+    meals.forEach(m=>{
+      const items = (c.program[d]&&c.program[d][m.id])||[];
+      const isLocked = items.some(it=>it&&it._locked) || (c.program[d]&&c.program[d][m.id]&&c.program[d][m.id]._mealLocked);
+      dayObj.repas[m.id] = {
+        aliments: items.map(it=>({nom:it.name, grammes:it.grams})),
+        verrouille: !!isLocked
+      };
+    });
+    return dayObj;
+  });
+}
+
+function buildProgramChatPrompt(c, history, userMsg){
+  const meals = getMeals(c);
+  const mealIds = meals.map(m=>m.id);
+  const summary = programSummaryForAI(c);
+
+  const system = `Tu es un(e) assistant(e) IA qui aide un coach sportif francophone à modifier le PROGRAMME DE LA SEMAINE d'un client (7 jours concrets, chacun avec des repas précis contenant des aliments réels et un grammage).
+
+Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte ni markdown autour.
+
+Tu disposes de DEUX actions possibles, à combiner si besoin :
+1. "copy_meal" : copie le contenu d'un repas vers un autre (jour/repas source → jour/repas cible). Utile pour "je veux que X soit identique à Y". day_index de 0 (Lundi) à 6 (Dimanche).
+2. "regenerate" : régénère le contenu (nouveaux aliments choisis parmi les aimés du client) d'un ou plusieurs repas précis, avec des consignes libres si besoin (ex: "plus de protéines", "sans féculent").
+
+RÈGLES :
+- Un repas verrouillé (verrouille:true) ne doit JAMAIS être écrasé — si la demande le concerne, explique-le dans "reply" et n'émets pas d'action dessus.
+- Si l'instruction est ambiguë (ex: pas de "lendemain" après dimanche soir), mets "needs_clarification":true, pose ta question dans "reply", et laisse "actions" vide. Le coach répondra au tour suivant.
+- Si la demande sort de ce que tu sais faire (ex: placer un aliment précis à un grammage précis, répondre à une question générale, modifier autre chose que le programme), mets "needs_clarification":true, "actions" vide, et explique gentiment dans "reply" — en une phrase, sans jargon — que tu peux seulement copier un repas vers un autre ou régénérer un repas avec des consignes, puis demande si l'une de ces deux options répond quand même au besoin.
+- Repas possibles (mealId) : ${JSON.stringify(mealIds)}.
+- "reply" doit être une courte confirmation conviviale en français de ce que tu as fait (ou une question si besoin de clarification), jamais de jargon technique.
+- Reste dans la limite des actions décrites — n'invente pas d'autre type d'action.`;
+
+  const userFull = `ÉTAT ACTUEL DU PROGRAMME (7 jours) :
+${JSON.stringify(summary)}
+
+HISTORIQUE DE LA CONVERSATION :
+${history || "(aucun message précédent)"}
+
+NOUVELLE INSTRUCTION DU COACH :
+${userMsg}
+
+Réponds avec UNIQUEMENT ce JSON :
+{
+  "reply": "confirmation courte et conviviale, ou question de clarification",
+  "needs_clarification": false,
+  "actions": [
+    { "type":"copy_meal", "from":{"day":1,"meal":"dejeuner"}, "to":{"day":0,"meal":"diner"} },
+    { "type":"regenerate", "days":[2], "meals":["petitdej"], "instructions":"plus de protéines" }
+  ]
+}`;
+
+  return { system, user: userFull };
+}
+
+async function applyProgramChatAction(c, action){
+  if(action.type==="copy_meal"){
+    const f = action.from||{}, t = action.to||{};
+    const df = Number(f.day), dt = Number(t.day);
+    const meals = getMeals(c).map(m=>m.id);
+    if(!(df>=0&&df<=6) || !(dt>=0&&dt<=6) || !meals.includes(f.meal) || !meals.includes(t.meal)){
+      return `⚠ Copie ignorée (paramètres invalides)`;
+    }
+    const srcMeal = (c.program[df]&&c.program[df][f.meal])||[];
+    const srcLocked = srcMeal.some(it=>it&&it._locked) || (c.program[df]&&c.program[df][f.meal]&&c.program[df][f.meal]._mealLocked);
+    const dstLocked = c.program[dt] && c.program[dt][t.meal] && (c.program[dt][t.meal].some(it=>it&&it._locked) || c.program[dt][t.meal]._mealLocked);
+    if(dstLocked){
+      return `🔒 ${DAYS_FULL[dt]} ${t.meal} est verrouillé — copie ignorée`;
+    }
+    if(!c.program[dt]) c.program[dt] = {};
+    c.program[dt][t.meal] = srcMeal.map(it=>({...it, _locked:false}));
+    return `✓ Copié ${DAYS_FULL[df]} ${f.meal}${srcLocked?" 🔒":""} → ${DAYS_FULL[dt]} ${t.meal}`;
+  }
+  if(action.type==="regenerate"){
+    const days = Array.isArray(action.days)&&action.days.length ? action.days.map(Number).filter(d=>d>=0&&d<=6) : [0,1,2,3,4,5,6];
+    const mealFilter = Array.isArray(action.meals)&&action.meals.length ? action.meals : null;
+    try{
+      const res = await runProgrammeAI(days, { foodScope:"liked", instructions:action.instructions||"", mealFilter });
+      if(!res) return `🔒 Rien à régénérer (tout est verrouillé ou hors-scope)`;
+      return `✓ Régénéré ${res.itemsApplied} aliment(s) sur ${res.daysCount} jour(s)`;
+    }catch(e){
+      return `❌ Échec de la régénération : ${e.message}`;
+    }
+  }
+  return `⚠ Action inconnue : ${action.type}`;
+}
+
+async function sendProgramChat(){
+  const c = client();
+  if(!c){ toast("Aucun client"); return; }
+  aiChatEnsure(c);
+
+  const inputEl = document.getElementById("progChatInput");
+  const msg = inputEl.value.trim();
+  if(!msg) return;
+
+  const sendBtn = document.getElementById("btnProgChatSend");
+  const loadingEl = document.getElementById("progChatLoading");
+
+  c.aiChatProgram.push({ role:"user", text:msg, ts:Date.now() });
+  inputEl.value = "";
+  renderAiChatMessages("progChatMessages", c.aiChatProgram);
+  save();
+
+  sendBtn.disabled = true;
+  loadingEl.classList.remove("hidden");
+
+  try{
+    const history = aiChatHistoryForPrompt(c.aiChatProgram.slice(0,-1));
+    const { system, user } = buildProgramChatPrompt(c, history, msg);
+    const { raw } = await callAI(system, user);
+    const parsed = aiParseJson(raw);
+    if(!parsed || typeof parsed.reply!=="string") throw new Error("Réponse IA inexploitable.");
+
+    let fullReply = parsed.reply;
+
+    if(!parsed.needs_clarification && Array.isArray(parsed.actions) && parsed.actions.length){
+      pushUndo("Chat IA — Programme");
+      const notes = [];
+      for(const action of parsed.actions){
+        const note = await applyProgramChatAction(c, action);
+        notes.push(note);
+      }
+      save();
+      renderProgram(); renderRemaining();
+      fullReply += "\n\n" + notes.join("\n");
+    }
+
+    c.aiChatProgram.push({ role:"assistant", text:fullReply, ts:Date.now() });
+    save();
+    renderAiChatMessages("progChatMessages", c.aiChatProgram);
+  }catch(e){
+    console.error(e);
+    c.aiChatProgram.push({ role:"assistant", text:"❌ "+e.message, ts:Date.now() });
+    save();
+    renderAiChatMessages("progChatMessages", c.aiChatProgram);
+  }finally{
+    sendBtn.disabled = false;
+    loadingEl.classList.add("hidden");
+  }
+}
+
+/* ---------- Chat Journée type ---------- */
+
+function jtCurrentConfigSummary(c, mealsInfo){
+  return mealsInfo.map(info=>{
+    const removedOptionsForMeal = {};
+    info.slots.forEach(s=>{
+      const key = info.mealId+"_"+s.origIdx;
+      if(c.journeeType.removedOptions && c.journeeType.removedOptions[key]){
+        removedOptionsForMeal[s.origIdx] = c.journeeType.removedOptions[key];
+      }
+    });
+    return {
+      mealId: info.mealId,
+      slots_actuels: info.slots.map(s=>({ origIdx:s.origIdx, cat:s.cat, label:s.label })),
+      slots_retires_actuellement: (c.journeeType.removedSlots && c.journeeType.removedSlots[info.mealId]) || [],
+      options_retirees_actuellement: removedOptionsForMeal,
+      slots_extra_actuels: (c.journeeType.extraSlots && c.journeeType.extraSlots[info.mealId]) || []
+    };
+  });
+}
+
+function buildJourneeChatPrompt(c, history, userMsg){
+  const { mealsInfo } = buildJourneeTypeAIPrompt(c, {}); // réutilise le calcul des slots/options disponibles
+  const currentConfig = jtCurrentConfigSummary(c, mealsInfo);
+
+  const system = `Tu es un(e) assistant(e) IA qui aide un coach sportif francophone à modifier, PAR PETITES TOUCHES, la JOURNÉE TYPE d'un client (un gabarit de journée avec des repas découpés en "slots" par rôle nutritionnel — Protéines, Glucides, Légumes... — chaque slot proposant une rotation de plusieurs aliments aimés interchangeables, avec un grammage calculé automatiquement).
+
+Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte ni markdown autour.
+
+TON RÔLE : ne modifie QUE les repas concernés par l'instruction du coach — n'inclus dans "meals" QUE ceux-là, laisse les autres complètement de côté (ils resteront inchangés).
+
+Pour chaque repas modifié, fournis l'état COMPLET souhaité (pas une différence) :
+- "slots_to_remove" : liste complète des origIdx à retirer entièrement pour ce repas (remplace la liste actuelle)
+- "slots_options_to_remove" : pour chaque slot modifié (clé = origIdx), liste COMPLÈTE des noms à exclure de sa rotation — UNIQUEMENT parmi "liked_options" de ce slot, jamais un nom inventé. Ne jamais tout retirer (garde au moins un nom).
+- "extra_slots" : liste complète des slots supplémentaires souhaités pour ce repas (catégorie parmi celles listées) — si le coach veut en ajouter un à ceux qui existent déjà, réinclus les existants + le nouveau.
+
+RÈGLES :
+- N'utilise/ne mentionne jamais un aliment lié à une allergie ou exclusion.
+- Si l'instruction est ambiguë, mets "needs_clarification":true, pose ta question dans "reply", et laisse "meals" vide.
+- Si la demande sort de ce que tu sais faire (ex: fixer un grammage précis, choisir un aliment fixe unique au lieu d'une rotation, répondre à une question générale), mets "needs_clarification":true, "meals" vide, et explique gentiment dans "reply" — en une phrase, sans jargon — que tu peux seulement ajouter/retirer un slot ou changer la rotation d'aliments d'un slot, puis demande si l'une de ces deux options répond quand même au besoin.
+- "reply" doit être une courte confirmation conviviale en français, jamais de jargon technique.`;
+
+  const userFull = `CATÉGORIES DISPONIBLES POUR "extra_slots" :
+${JSON.stringify(JT_AI_EXTRA_CATS)}
+
+REPAS, SLOTS ET OPTIONS DISPONIBLES :
+${JSON.stringify(mealsInfo)}
+
+CONFIGURATION ACTUELLE (ce qui est déjà en place, à faire évoluer selon l'instruction) :
+${JSON.stringify(currentConfig)}
+
+HISTORIQUE DE LA CONVERSATION :
+${history || "(aucun message précédent)"}
+
+NOUVELLE INSTRUCTION DU COACH :
+${userMsg}
+
+Réponds avec UNIQUEMENT ce JSON :
+{
+  "reply": "confirmation courte et conviviale, ou question de clarification",
+  "needs_clarification": false,
+  "meals": [
+    { "mealId": "diner", "slots_to_remove": [2], "slots_options_to_remove": {}, "extra_slots": [] }
+  ]
+}`;
+
+  return { system, user: userFull, mealsInfo };
+}
+
+async function sendJourneeChat(){
+  const c = client();
+  if(!c){ toast("Aucun client"); return; }
+  aiChatEnsure(c);
+
+  const inputEl = document.getElementById("jtChatInput");
+  const msg = inputEl.value.trim();
+  if(!msg) return;
+
+  const sendBtn = document.getElementById("btnJtChatSend");
+  const loadingEl = document.getElementById("jtChatLoading");
+
+  c.aiChatJournee.push({ role:"user", text:msg, ts:Date.now() });
+  inputEl.value = "";
+  renderAiChatMessages("jtChatMessages", c.aiChatJournee);
+  save();
+
+  sendBtn.disabled = true;
+  loadingEl.classList.remove("hidden");
+
+  try{
+    const history = aiChatHistoryForPrompt(c.aiChatJournee.slice(0,-1));
+    const { system, user, mealsInfo } = buildJourneeChatPrompt(c, history, msg);
+    const { raw } = await callAI(system, user);
+    const parsed = aiParseJson(raw);
+    if(!parsed || typeof parsed.reply!=="string") throw new Error("Réponse IA inexploitable.");
+
+    let fullReply = parsed.reply;
+    const ALLOWED_CATS = new Set(Object.keys(JT_AI_EXTRA_CATS));
+
+    if(!parsed.needs_clarification && Array.isArray(parsed.meals) && parsed.meals.length){
+      pushUndo("Chat IA — Journée type");
+      if(!c.journeeType) c.journeeType = { slots:{}, removedSlots:{}, extraSlots:{}, slotOptions:{}, slotTargets:{}, customOptions:{}, removedOptions:{}, disabledMeals:[], slotNotes:{} };
+
+      const touched = [];
+      parsed.meals.forEach(pm=>{
+        const info = mealsInfo.find(mi=>mi.mealId===pm.mealId);
+        if(!info) return;
+        const validIdx = new Set(info.slots.map(s=>s.origIdx));
+
+        if(Array.isArray(pm.slots_to_remove)){
+          const toRemove = pm.slots_to_remove.map(Number).filter(i=>validIdx.has(i));
+          if(toRemove.length) c.journeeType.removedSlots[pm.mealId] = toRemove;
+          else delete c.journeeType.removedSlots[pm.mealId];
+        }
+
+        if(pm.slots_options_to_remove && typeof pm.slots_options_to_remove==="object"){
+          Object.entries(pm.slots_options_to_remove).forEach(([idxStr,names])=>{
+            const idx = Number(idxStr);
+            if(!validIdx.has(idx)) return;
+            const slotInfo = info.slots.find(s=>s.origIdx===idx);
+            if(!slotInfo) return;
+            const validNames = new Set(slotInfo.liked_options);
+            const namesToRemove = (Array.isArray(names)?names:[]).filter(n=>validNames.has(n));
+            const key = pm.mealId+"_"+idx;
+            if(namesToRemove.length && namesToRemove.length<slotInfo.liked_options.length){
+              c.journeeType.removedOptions[key] = namesToRemove;
+            } else {
+              delete c.journeeType.removedOptions[key];
+            }
+          });
+        }
+
+        if(Array.isArray(pm.extra_slots)){
+          const extras = pm.extra_slots.filter(e=>e&&ALLOWED_CATS.has(e.cat)).map(e=>({cat:e.cat}));
+          if(extras.length) c.journeeType.extraSlots[pm.mealId] = extras;
+          else delete c.journeeType.extraSlots[pm.mealId];
+        }
+
+        touched.push(pm.mealId);
+      });
+
+      save();
+      renderJourneeType();
+      if(touched.length) fullReply += "\n\n✓ Repas ajustés : " + touched.join(", ");
+    }
+
+    c.aiChatJournee.push({ role:"assistant", text:fullReply, ts:Date.now() });
+    save();
+    renderAiChatMessages("jtChatMessages", c.aiChatJournee);
+  }catch(e){
+    console.error(e);
+    c.aiChatJournee.push({ role:"assistant", text:"❌ "+e.message, ts:Date.now() });
+    save();
+    renderAiChatMessages("jtChatMessages", c.aiChatJournee);
+  }finally{
+    sendBtn.disabled = false;
+    loadingEl.classList.add("hidden");
+  }
+}
+
+/* ---------- Init commun des deux chats ---------- */
+
+const PROG_CHAT_EXAMPLES = [
+  "Copie le déjeuner de mardi dans le dîner de lundi",
+  "Le dîner doit être identique au déjeuner du lendemain, toute la semaine",
+  "Refais le petit-déjeuner de mercredi avec plus de protéines",
+];
+const JT_CHAT_EXAMPLES = [
+  "Retire le fruit du dîner",
+  "Ajoute un féculent au petit-déjeuner",
+  "Garde moins d'options dans le slot protéines du midi",
+];
+
+function renderChatExamples(containerId, examples, inputId){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  el.innerHTML = examples.map(ex=>
+    `<button type="button" class="text-xs px-2.5 py-1 rounded-full" style="background:#eef3ef;color:#37503f;border:1px solid #d7e2da;" data-example="${esc(ex)}">${esc(ex)}</button>`
+  ).join("");
+  el.querySelectorAll("[data-example]").forEach(b=>b.addEventListener("click",()=>{
+    document.getElementById(inputId).value = b.dataset.example;
+    document.getElementById(inputId).focus();
+  }));
+}
+
+function initAiChats(){
+  renderChatExamples("progChatExamples", PROG_CHAT_EXAMPLES, "progChatInput");
+  renderChatExamples("jtChatExamples", JT_CHAT_EXAMPLES, "jtChatInput");
+
+  // Programme
+  document.getElementById("btnToggleProgChat")?.addEventListener("click", ()=>{
+    const c = client();
+    const panel = document.getElementById("progChatPanel");
+    panel.classList.toggle("hidden");
+    if(!panel.classList.contains("hidden") && c){
+      aiChatEnsure(c);
+      renderAiChatMessages("progChatMessages", c.aiChatProgram);
+    }
+  });
+  document.getElementById("btnProgChatSend")?.addEventListener("click", sendProgramChat);
+  document.getElementById("progChatInput")?.addEventListener("keydown", e=>{
+    if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendProgramChat(); }
+  });
+  document.getElementById("btnClearProgChat")?.addEventListener("click", ()=>{
+    const c = client(); if(!c) return;
+    if(!confirm("Effacer toute la conversation avec l'assistant IA (Programme) ?")) return;
+    c.aiChatProgram = []; save();
+    renderAiChatMessages("progChatMessages", c.aiChatProgram);
+  });
+
+  // Journée type
+  document.getElementById("btnToggleJtChat")?.addEventListener("click", ()=>{
+    const c = client();
+    const panel = document.getElementById("jtChatPanel");
+    panel.classList.toggle("hidden");
+    if(!panel.classList.contains("hidden") && c){
+      aiChatEnsure(c);
+      renderAiChatMessages("jtChatMessages", c.aiChatJournee);
+    }
+  });
+  document.getElementById("btnJtChatSend")?.addEventListener("click", sendJourneeChat);
+  document.getElementById("jtChatInput")?.addEventListener("keydown", e=>{
+    if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendJourneeChat(); }
+  });
+  document.getElementById("btnClearJtChat")?.addEventListener("click", ()=>{
+    const c = client(); if(!c) return;
+    if(!confirm("Effacer toute la conversation avec l'assistant IA (Journée type) ?")) return;
+    c.aiChatJournee = []; save();
+    renderAiChatMessages("jtChatMessages", c.aiChatJournee);
+  });
 }
 
 </script>
