@@ -175,11 +175,8 @@ tailwind.config = {
   .calc-row { display:grid; grid-template-columns:1fr 100px 50px 50px 50px 50px 60px; gap:4px; align-items:center; padding:8px 16px; border-top:1px solid var(--line); font-size:13px; }
   .calc-hdr { display:grid; grid-template-columns:1fr 100px 50px 50px 50px 50px 60px; gap:4px; padding:6px 16px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:#9aa397; border-bottom:1px solid var(--line); }
 
-  /* ---- NAP Sport ---- */
+  /* ---- NAP Sport (profil client uniquement, cf. Fiche & macros) ---- */
   .nap-info { font-size:12px; color:#798376; background:#f6f7f5; border-radius:8px; padding:8px 10px; margin-top:4px; }
-  .sport-day-badge { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:2px 7px; border-radius:6px; }
-  .sport-day-badge.sport { background:#eef3ef; color:#37503f; }
-  .sport-day-badge.rest  { background:#f3f4f1; color:#798376; }
   .day-kcal-note { font-size:11px; color:#798376; font-style:italic; padding:3px 0; }
 
 
@@ -589,11 +586,11 @@ tailwind.config = {
                 <button data-f="harris">Harris-Benedict</button>
               </div>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-2 gap-4">
 
-              <div class="md:col-span-2">
-                <label class="fld-lbl">NAP jour de repos
-                  <span style="cursor:help;color:#aab2a6;" title="Niveau d'activité physique pour les jours sans sport.
+              <div>
+                <label class="fld-lbl">NAP (niveau d'activité physique)
+                  <span style="cursor:help;color:#aab2a6;" title="Niveau d'activité physique global du client, sport compris.
 1.2 = Sédentaire (bureau toute la journée, pas de sport)
 1.375 = Légèrement actif (marche légère, 1-2 sport/semaine)
 1.55 = Modérément actif (sport 3-5x/semaine, travail debout)
@@ -607,23 +604,6 @@ tailwind.config = {
                   <option value="1.725">1.725 — Très actif (sport quotidien)</option>
                   <option value="1.9">1.9 — Extrêmement actif (sport intense + travail physique)</option>
                 </select>
-              </div>
-              <div>
-                <label class="fld-lbl">NAP jour de sport
-                  <span style="cursor:help;color:#aab2a6;" title="NAP appliqué les jours cochés 'Sport' dans le programme.
-En général 0.1-0.2 de plus que votre NAP repos.
-Ex: repos=1.375 → sport=1.55 (+180 kcal/j)
-Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
-                </label>
-                <select id="cNapSport" class="fld">
-                  <option value="1.375">1.375 — Léger (marche rapide, yoga)</option>
-                  <option value="1.55">1.55 — Modéré (cardio 45min, muscu légère)</option>
-                  <option value="1.725">1.725 — Intense (séance muscu, HIIT, course)</option>
-                  <option value="1.9">1.9 — Très intense (compétition, double séance)</option>
-                </select>
-                <div class="nap-info" id="napSportDiff">
-                  Surplus estimé les jours de sport : <strong id="napSportDiffVal">+0 kcal</strong>
-                </div>
               </div>
               <div>
                 <label class="fld-lbl">Objectif</label>
@@ -816,9 +796,6 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
               <button id="btnGenDay" class="btn btn-primary text-[.82rem]">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3Z"/></svg>
                 Générer
-              </button>
-              <button id="btnToggleSport" class="btn btn-ghost text-[.82rem]">
-                🏋 Sport ce jour
               </button>
               <button id="btnDupDay" class="btn btn-ghost text-[.82rem]">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>
@@ -1133,12 +1110,6 @@ Ex: repos=1.55 → sport=1.725 (+200 kcal/j)">ℹ</span>
           <p class="text-sm" style="color:#798376">Structure de repas flexible calculée sur les macros du client — il choisit ses aliments dans chaque catégorie.</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <!-- Toggle sport/repos journée type -->
-          <button id="btnJtSport" onclick="toggleJtSport()"
-            class="btn btn-ghost flex items-center gap-2 text-sm">
-            <span id="jtSportIcon">🛌</span>
-            <span id="jtSportLabel">Repos</span>
-          </button>
           <!-- Toggle noms des repas (Petit-déj/Collation... <-> Repas 1/2/3...) -->
           <button id="btnJtNumbered" onclick="toggleJtNumberedMeals()"
             class="btn btn-ghost flex items-center gap-2 text-sm" title="Utile pour le jeûne intermittent ou les horaires atypiques : remplace les noms de repas par Repas 1, Repas 2...">
@@ -2855,7 +2826,7 @@ function freshClient(){
   return {
     id,
     profile:{ prenom:"", nom:"", sexe:"F", age:30, dateNaissance:"", poids:65, taille:168 },
-    energy:{ formula:"mifflin", nap:1.55, napSport:1.725, objectif:-300 },
+    energy:{ formula:"mifflin", nap:1.55, objectif:-300 },
     profileType: null, // clé PROFILE_PRESETS sélectionnée (préréglage g/kg), null = aucun
     sportDays:{ 0:false,1:false,2:false,3:false,4:false,5:true,6:false },
     macros:{ manual:false, prot:140, gluc:160, lip:55 },
@@ -2947,7 +2918,6 @@ function normalizeClient(c){
   c.profile  = Object.assign({}, base.profile,  c.profile  && typeof c.profile==="object"  ? c.profile  : {});
   syncAge(c); // recalcule l'âge depuis la date de naissance si elle est renseignée
   c.energy   = Object.assign({}, base.energy,   c.energy   && typeof c.energy==="object"   ? c.energy   : {});
-  if(!c.energy.napSport) c.energy.napSport = 1.725;
   if(!c.sportDays || typeof c.sportDays!=="object") c.sportDays={0:false,1:false,2:false,3:false,4:false,5:true,6:false};
   c.macros   = Object.assign({}, base.macros,   c.macros   && typeof c.macros==="object"   ? c.macros   : {});
   c.prefs    = Object.assign({}, base.prefs,    c.prefs    && typeof c.prefs==="object"    ? c.prefs    : {});
@@ -3456,23 +3426,10 @@ function targetKcal(c) {
   }
   return Math.max(800, Math.round(tdee(c) + delta));
 }
-/* targetKcalDay : comme targetKcal mais prend en compte si c'est un jour de sport */
+/* targetKcalDay : alias de targetKcal, la cible est désormais identique tous les
+   jours de la semaine (le programme est "lissé", plus de distinction sport/repos). */
 function targetKcalDay(c, dayIndex) {
-  if(!c) return 2000;
-  const isSport = c.sportDays && c.sportDays[dayIndex];
-  const nap = isSport
-    ? n0((c.energy&&c.energy.napSport)||1.725)
-    : n0((c.energy&&c.energy.nap)||1.55);
-  const b = bmr(c.profile, c.energy&&c.energy.formula);
-  const tdeeDay = b * (nap||1.55);
-  // Même logique delta que targetKcal : respecte goalExplicit + GOAL_DELTAS
-  let delta;
-  if(c.goalExplicit && GOAL_DELTAS[c.goalExplicit] !== undefined) {
-    delta = GOAL_DELTAS[c.goalExplicit] + n0((c.energy&&c.energy.objectifAjust)||0);
-  } else {
-    delta = n0((c.energy&&c.energy.objectif)||0);
-  }
-  return Math.max(800, Math.round(tdeeDay + delta));
+  return targetKcal(c);
 }
 
 /* item -> macros effectives selon grammage — jamais NaN */
@@ -4167,14 +4124,7 @@ function renderProfil(){
   if(ageCalcEl) ageCalcEl.textContent = c.profile.age ? `${c.profile.age} ans` : "—";
   setVal("cPoids",c.profile.poids); setVal("cTaille",c.profile.taille);
   setVal("cNap",c.energy.nap);
-  setVal("cNapSport",c.energy.napSport||1.725);
   setVal("cObjectif",c.energy.objectif);
-  // Diff kcal sport/repos
-  const bmrVal=bmr(c.profile,c.energy.formula);
-  const kcalRest=Math.round(bmrVal*n0(c.energy.nap));
-  const kcalSport=Math.round(bmrVal*n0(c.energy.napSport||1.725));
-  const diffEl=document.getElementById("napSportDiffVal");
-  if(diffEl) diffEl.textContent=`+${fmt(Math.max(0,kcalSport-kcalRest))} kcal`;
 
   document.querySelectorAll("#segFormula button").forEach(b=>
     b.classList.toggle("active", b.dataset.f===c.energy.formula));
@@ -4406,14 +4356,7 @@ function renderProgram(){
   // sélecteur de jour
   const seg=document.getElementById("daySeg");
   seg.innerHTML = DAYS.map((d,i)=>{
-    const isSport = c.sportDays && c.sportDays[i];
-    const tgtDay  = targetKcalDay(c, i);
-    return `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
-      <button data-day="${i}" class="${i===activeDay?'active':''}" style="position:relative;">
-        ${d}${isSport?'<span style="position:absolute;top:-4px;right:-4px;width:8px;height:8px;background:#5b7d6a;border-radius:50%;"></span>':''}
-      </button>
-      <span class="${isSport?'sport-day-badge sport':'sport-day-badge rest'}">${isSport?'🏋 sport':'🛌 repos'}</span>
-    </div>`;
+    return `<button data-day="${i}" class="${i===activeDay?'active':''}">${d}</button>`;
   }).join("");
   seg.querySelectorAll("[data-day]").forEach(b=>b.addEventListener("click",()=>{ activeDay=+b.dataset.day; renderProgram(); }));
 
@@ -4960,19 +4903,11 @@ function renderRemaining(){
   document.getElementById("remKcal").textContent=fmt(remK);
   document.getElementById("targetKcalLbl").textContent=fmt(tgt);
   document.getElementById("remKcalBar").style.width=Math.min(tot.kcal/tgt*100,100)+"%";
-  // Note sport/repos
-  const isSportDay = c.sportDays && c.sportDays[activeDay];
+  // Note calorique du jour (cible identique tous les jours, programme lissé)
   const noteEl = document.getElementById("dayKcalNote");
   if(noteEl){
-    const tgtRest = targetKcal(c);
-    if(isSportDay && c.energy.napSport > c.energy.nap){
-      const bonus = r0(tgt - tgtRest);
-      noteEl.textContent = `🏋 Jour de sport — +${fmt(bonus)} kcal vs repos pour compenser la dépense et optimiser la récupération`;
-      noteEl.style.display="block";
-    } else {
-      noteEl.textContent = `🛌 Jour de repos — ${fmt(tgt)} kcal optimisées pour la récupération`;
-      noteEl.style.display="block";
-    }
+    noteEl.textContent = `${fmt(tgt)} kcal — même cible chaque jour de la semaine`;
+    noteEl.style.display="block";
   }
 
   const setMac=(g,labelId,barId,tgtG,col)=>{
@@ -6503,8 +6438,7 @@ function exportExcel(c, opts){
     if(!hasItems && !hasEcarts) return;
 
     hasDays = true;
-    const isSport = c.sportDays && c.sportDays[d];
-    aoa.push([`${dlabel.toUpperCase()}${isSport?" — SPORT":""}`]);
+    aoa.push([dlabel.toUpperCase()]);
 
     // En-tête colonnes
     const hdr = ["Repas","Aliment","Quantité"];
@@ -6616,10 +6550,9 @@ function exportPDF(c, opts) {
     let dk=0,dp=0,dg=0,dl=0;
     meals.forEach(m=>(prog[m.id]||[]).forEach(it=>{ if(!it||!it.base) return; const mm=itemMacros(it);dk+=mm.kcal;dp+=mm.prot;dg+=mm.gluc;dl+=mm.lip; }));
     if(!dk) return null;
-    const isSport=c.sportDays&&c.sportDays[d];
     const tgtD=targetKcalDay(c,d);
     const diff=dk-tgtD;
-    return { dlabel: DAYS_FULL[d], dk, dp, dg, dl, diff, isSport };
+    return { dlabel: DAYS_FULL[d], dk, dp, dg, dl, diff };
   }).filter(Boolean);
 
   if(synData.length){
@@ -6646,7 +6579,7 @@ function exportPDF(c, opts) {
       checkY(6.5);
       doc.setFont("helvetica","normal"); doc.setFontSize(9.5);
       let x2 = ML;
-      doc.text(row.dlabel + (row.isSport?" (sport)":""), x2+2, y+4); x2+=CW2.jour;
+      doc.text(row.dlabel, x2+2, y+4); x2+=CW2.jour;
       doc.text(pdfSafe(fmt(row.dk)), x2+CW2.kcal-2, y+4, {align:"right"}); x2+=CW2.kcal;
       doc.text(r0(row.dp)+"g", x2+CW2.p-2, y+4, {align:"right"}); x2+=CW2.p;
       doc.text(r0(row.dg)+"g", x2+CW2.g-2, y+4, {align:"right"}); x2+=CW2.g;
@@ -6738,12 +6671,11 @@ function exportPDF(c, opts) {
 
     let dayKcal=0, dayP=0, dayG=0, dayL=0;
     meals.forEach(m=>(prog[m.id]||[]).forEach(it=>{ const mm=itemMacros(it); dayKcal+=mm.kcal; dayP+=mm.prot; dayG+=mm.gluc; dayL+=mm.lip; }));
-    const isSport = c.sportDays && c.sportDays[d];
 
     checkY(14);
     doc.setFillColor(28,37,33); doc.rect(ML, y, W, 9, "F");
     doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(255);
-    let dayTitle = DAYS_FULL[d].toUpperCase() + (isSport ? "  (JOUR SPORT)" : "");
+    let dayTitle = DAYS_FULL[d].toUpperCase();
     doc.text(dayTitle, ML+3, y+6.2);
     if(!opts.hideKcal){
       doc.setFont("helvetica","normal"); doc.setFontSize(9.5);
@@ -8352,7 +8284,7 @@ function renderAll(){
 function bindProfilInputs(){
   const map={ cPrenom:["profile","prenom","s"], cNom:["profile","nom","s"], cSexe:["profile","sexe","s"],
     cPoids:["profile","poids","n"], cTaille:["profile","taille","n"],
-    cNap:["energy","nap","n"], cObjectif:["energy","objectif","n"], cNapSport:["energy","napSport","n"],
+    cNap:["energy","nap","n"], cObjectif:["energy","objectif","n"],
     mProt:["macros","prot","n"], mGluc:["macros","gluc","n"], mLip:["macros","lip","n"] };
   Object.entries(map).forEach(([id,[grp,key,type]])=>{
     document.getElementById(id).addEventListener("input",e=>{
@@ -9008,14 +8940,6 @@ function init(){
 
   // programme
   document.getElementById("btnDupDay").addEventListener("click",dupDay);
-  const btnTS=document.getElementById("btnToggleSport");
-  if(btnTS) btnTS.addEventListener("click",()=>{
-    const c=client(); if(!c) return;
-    if(!c.sportDays) c.sportDays={};
-    c.sportDays[activeDay]=!c.sportDays[activeDay];
-    save(); renderProgram(); renderRemaining();
-    toast(c.sportDays[activeDay]?"🏋 Jour de sport activé":"🛌 Jour de repos");
-  });
   document.getElementById("btnGenDay").addEventListener("click",generateAndApply);
   const btnGW = document.getElementById("btnGenWeek");
   if(btnGW) btnGW.addEventListener("click",generateWeek);
@@ -9472,8 +9396,7 @@ function jtDeltaKcalFor(sel, c){
 // Cible kcal/j de la Journée Type : tient compte du mode sport/repos ET du menu Objectif
 // (au lieu de toujours utiliser le delta d'objectif enregistré sur le profil du client).
 function jtTargetKcal(c, sel){
-  const isSport = !!window._jtIsSport;
-  const nap = isSport ? n0((c.energy&&c.energy.napSport)||1.725) : n0((c.energy&&c.energy.nap)||1.55);
+  const nap = n0((c.energy&&c.energy.nap)||1.55);
   const b = bmr(c.profile, c.energy&&c.energy.formula);
   const delta = jtDeltaKcalFor(sel, c);
   return Math.max(800, Math.round(b*nap + delta));
@@ -10480,22 +10403,8 @@ function updateJtSlot(input, mealId, slotIdx) {
 }
 
 
-/* ---- Journée type : mode sport/repos ---- */
-window._jtIsSport = false; // false = repos (défaut)
-
-function toggleJtSport() {
-  window._jtIsSport = !window._jtIsSport;
-  // Mettre à jour le bouton
-  const icon  = document.getElementById("jtSportIcon");
-  const label = document.getElementById("jtSportLabel");
-  const btn   = document.getElementById("btnJtSport");
-  if(icon)  icon.textContent  = window._jtIsSport ? "🏋" : "🛌";
-  if(label) label.textContent = window._jtIsSport ? "Sport" : "Repos";
-  if(btn)   btn.style.background = window._jtIsSport ? "#eef3ef" : "";
-  if(btn)   btn.style.color      = window._jtIsSport ? "#37503f" : "";
-  // Recalculer la journée type avec le nouveau mode
-  renderJourneeType();
-}
+/* ---- Journée type : programme lissé, une seule cible tous les jours ---- */
+window._jtIsSport = false; // toujours false désormais (plus de distinction sport/repos)
 
 /* Bascule en un clic entre les noms de repas classiques (Petit-déjeuner, Collation...)
    et une numérotation neutre (Repas 1, Repas 2...) — pratique pour le jeûne intermittent
@@ -10544,14 +10453,6 @@ function renderJourneeType() {
   const mac = effectiveMacros(c);
 
   // Sync bouton sport/repos
-  const _jtIcon  = document.getElementById("jtSportIcon");
-  const _jtLabel = document.getElementById("jtSportLabel");
-  const _jtBtn   = document.getElementById("btnJtSport");
-  if(_jtIcon)  _jtIcon.textContent  = window._jtIsSport ? "🏋" : "🛌";
-  if(_jtLabel) _jtLabel.textContent = window._jtIsSport ? "Sport" : "Repos";
-  if(_jtBtn){  _jtBtn.style.background = window._jtIsSport ? "#eef3ef" : "";
-               _jtBtn.style.color      = window._jtIsSport ? "#37503f" : ""; }
-
   // Sync bouton renommage des repas (Repas 1,2,3...)
   const _jtNumOn   = !!(c.journeeType && c.journeeType.numberedMeals);
   const _jtNumBtn  = document.getElementById("btnJtNumbered");
@@ -10718,20 +10619,11 @@ function exportJourneePDF() {
   const jsPDFLib = getJsPDF();
   if(!jsPDFLib){ toast("jsPDF non disponible — rechargez la page"); return; }
 
-  const prevSport = window._jtIsSport;
-  [
-    { isSport:false, tag:"repos", label:"Jour de repos" },
-    { isSport:true,  tag:"sport", label:"Jour de sport" },
-  ].forEach(mode=>{
-    window._jtIsSport = mode.isSport;
-    _genJourneeTypePDF(jsPDFLib, c, mode);
-  });
-  window._jtIsSport = prevSport;
-
-  toast("✓ 2 PDF générés (repos + sport)");
+  _genJourneeTypePDF(jsPDFLib, c);
+  toast("✓ PDF généré");
 }
 
-function _genJourneeTypePDF(jsPDFLib, c, mode) {
+function _genJourneeTypePDF(jsPDFLib, c) {
   const objSel   = jtObjectifSelValue(c);
   const tgt      = jtTargetKcal(c, objSel);
   const mac      = effectiveMacros(c);
@@ -10749,9 +10641,7 @@ function _genJourneeTypePDF(jsPDFLib, c, mode) {
   // ── En-tête ──────────────────────────────────────────────
   doc.setFont("helvetica","bold"); doc.setFontSize(18);
   doc.text(`Journee type — ${fullName}`, ML, y); y+=8;
-  doc.setFont("helvetica","normal"); doc.setFontSize(10.5); doc.setTextColor(180,100,20);
-  doc.text(pdfSafe(mode.label.toUpperCase()), ML, y); y+=5.5;
-  doc.setTextColor(0);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10.5); doc.setTextColor(0);
   // fmtPdf : pas de separateur de milliers (inutile ici, kcal < 10000) pour
   // eviter le caractere d'espace fine insecable non supporte par la police PDF
   const fmtPdf = n => String(r0(n));
@@ -10915,7 +10805,7 @@ function _genJourneeTypePDF(jsPDFLib, c, mode) {
     doc.setTextColor(0);
   }
 
-  doc.save(`journee-type-${mode.tag}-${slug(c)}.pdf`);
+  doc.save(`journee-type-${slug(c)}.pdf`);
 }
 
 /* =========================================================
@@ -10935,20 +10825,11 @@ function exportJourneePDFPortail(){
   const jsPDFLib = getJsPDF();
   if(!jsPDFLib){ toast("jsPDF non disponible — rechargez la page"); return; }
 
-  const prevSport = window._jtIsSport;
-  [
-    { isSport:false, tag:"repos", label:"Jour de repos" },
-    { isSport:true,  tag:"sport", label:"Jour de sport" },
-  ].forEach(mode=>{
-    window._jtIsSport = mode.isSport;
-    _genJourneeTypePDFPortail(jsPDFLib, c, mode);
-  });
-  window._jtIsSport = prevSport;
-
-  toast("✓ 2 PDF format portail générés (repos + sport)");
+  _genJourneeTypePDFPortail(jsPDFLib, c);
+  toast("✓ PDF format portail généré");
 }
 
-function _genJourneeTypePDFPortail(jsPDFLib, c, mode){
+function _genJourneeTypePDFPortail(jsPDFLib, c){
   const objSel   = jtObjectifSelValue(c);
   const tgt      = jtTargetKcal(c, objSel);
   const mac      = effectiveMacros(c);
@@ -10973,8 +10854,6 @@ function _genJourneeTypePDFPortail(jsPDFLib, c, mode){
   // ── En-tête ──────────────────────────────────────────────
   doc.setFont("helvetica","bold"); doc.setFontSize(19); doc.setTextColor(...SAGE_D);
   doc.text(pdfSafe(`Journee type — ${fullName}`), ML, y); y+=7.5;
-  doc.setFont("helvetica","bold"); doc.setFontSize(10.5); doc.setTextColor(...AMBER);
-  doc.text(pdfSafe(mode.label.toUpperCase()), ML, y); y+=5.5;
   doc.setFont("helvetica","normal"); doc.setFontSize(10.5); doc.setTextColor(...MUTED);
   const sub = [objLabel||"", `${fmtPdf(tgt)} kcal/j`].filter(Boolean).join("  ·  ");
   doc.text(pdfSafe(sub), ML, y); y+=5;
@@ -11123,7 +11002,7 @@ function _genJourneeTypePDFPortail(jsPDFLib, c, mode){
     doc.setTextColor(0);
   }
 
-  doc.save(`journee-type-portail-${mode.tag}-${slug(c)}.pdf`);
+  doc.save(`journee-type-portail-${slug(c)}.pdf`);
 }
 
 /* =========================================================
@@ -11148,12 +11027,9 @@ function exportJourneePortal(){
 
   // ── Construit le HTML des repas pour un mode donné (repos/sport) et
   // collecte au passage les produits Fitness Boutique rencontrés ──────────
-  function buildJtModeHtml(isSport){
-    const prevSport = window._jtIsSport;
-    window._jtIsSport = isSport;
+  function buildJtModeHtml(){
     const tgtMode   = jtTargetKcal(c, objSel);
     const mealsMode = buildJourneeType(c);
-    window._jtIsSport = prevSport;
 
     const fbSet = new Set();
     const mealsHtml = mealsMode.filter(m=>!m.disabled).map(m=>{
@@ -11211,48 +11087,50 @@ function exportJourneePortal(){
     return { tgt: tgtMode, html: mealsHtml, fb: fbSet };
   }
 
-  const variantRepos = buildJtModeHtml(false);
-  const variantSport = buildJtModeHtml(true);
-  const fbProducts = new Set([...variantRepos.fb, ...variantSport.fb]);
+  const variant = buildJtModeHtml();
+  const fbProducts = variant.fb;
 
   const noteHtml = note ? `<div class="jtp-note"><strong>Note du coach :</strong> ${esc(note)}</div>` : "";
   const hasFB = fbProducts.size > 0;
 
   const fbPanelInner = hasFB ? `<div class="jtp-fb">
       <div class="jtp-fb-head">🛒 Produits Fitness Boutique à prévoir</div>
-      <div class="jtp-fb-sub">À acheter selon vos préférences parmi les options proposées dans le plan (repos + sport) :</div>
+      <div class="jtp-fb-sub">À acheter selon vos préférences parmi les options proposées dans le plan :</div>
       <div class="jtp-fb-list">${[...fbProducts].map(name=>`<div class="jtp-fb-item">${esc(name)}</div>`).join("")}</div>
     </div>` : "";
 
-  // ── Onglets Repos / Sport (+ FitnessBoutique le cas échéant) — CSS-only, ZÉRO dépendance JS ──
-  const jtTabDefs = [
-    { id:"repos", label:"🛌 Repos" },
-    { id:"sport", label:"🏋 Sport" },
-  ];
-  if(hasFB) jtTabDefs.push({ id:"fb", label:"💪 FitnessBoutique" });
+  // ── Onglet FitnessBoutique uniquement si des produits FB sont présents — CSS-only, ZÉRO dépendance JS ──
+  let bodyContentHtml;
+  let jtTabCssRulesOut = "";
+  if(hasFB){
+    const jtTabDefs = [
+      { id:"plan", label:"🍽️ Journée type" },
+      { id:"fb",   label:"💪 FitnessBoutique" },
+    ];
+    const jtRadiosHtml = jtTabDefs.map((t,i)=>
+      `<input type="radio" name="jtptabgroup" id="jtptab-${t.id}" class="jtp-radio"${i===0?" checked":""}>`
+    ).join("");
+    const jtTabsHtml = jtTabDefs.map(t=>`<label class="jtp-tab" for="jtptab-${t.id}" data-tab="${t.id}">${t.label}</label>`).join("");
+    jtTabCssRulesOut = jtTabDefs.map(t=>
+      `#jtptab-${t.id}:checked ~ .jtp-tabs label[data-tab="${t.id}"]{ background:var(--sage); border-color:var(--sage); color:#fff; }
+       #jtptab-${t.id}:checked ~ #jtp-panel-${t.id}{ display:block; }`
+    ).join("\n  ");
 
-  const jtRadiosHtml = jtTabDefs.map((t,i)=>
-    `<input type="radio" name="jtptabgroup" id="jtptab-${t.id}" class="jtp-radio"${i===0?" checked":""}>`
-  ).join("");
-  const jtTabsHtml = jtTabDefs.map(t=>`<label class="jtp-tab" for="jtptab-${t.id}" data-tab="${t.id}">${t.label}</label>`).join("");
-  const jtTabCssRules = jtTabDefs.map(t=>
-    `#jtptab-${t.id}:checked ~ .jtp-tabs label[data-tab="${t.id}"]{ background:var(--sage); border-color:var(--sage); color:#fff; }
-     #jtptab-${t.id}:checked ~ #jtp-panel-${t.id}{ display:block; }`
-  ).join("\n  ");
-
-  const bodyContentHtml = `
-    ${jtRadiosHtml}
-    <div class="jtp-tabs">${jtTabsHtml}</div>
-    <div class="jtp-panel" id="jtp-panel-repos">
-      <div class="jtp-day-badge">🛌 Jour de repos · ${r0(variantRepos.tgt)} kcal/j</div>
-      ${variantRepos.html}${noteHtml}
-    </div>
-    <div class="jtp-panel" id="jtp-panel-sport">
-      <div class="jtp-day-badge">🏋 Jour de sport · ${r0(variantSport.tgt)} kcal/j</div>
-      ${variantSport.html}${noteHtml}
-    </div>
-    ${hasFB?`<div class="jtp-panel" id="jtp-panel-fb">${fbPanelInner}</div>`:""}
-  `;
+    bodyContentHtml = `
+      ${jtRadiosHtml}
+      <div class="jtp-tabs">${jtTabsHtml}</div>
+      <div class="jtp-panel" id="jtp-panel-plan">
+        <div class="jtp-day-badge">${r0(variant.tgt)} kcal/j</div>
+        ${variant.html}${noteHtml}
+      </div>
+      <div class="jtp-panel" id="jtp-panel-fb">${fbPanelInner}</div>
+    `;
+  } else {
+    bodyContentHtml = `
+      <div class="jtp-day-badge">${r0(variant.tgt)} kcal/j</div>
+      ${variant.html}${noteHtml}
+    `;
+  }
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -11275,7 +11153,7 @@ function exportJourneePortal(){
   .jtp-tabs{ display:flex; gap:6px; margin:0 0 16px; }
   .jtp-tab{ flex:0 0 auto; border:1px solid var(--line); background:#fff; color:#5b7d6a; font-weight:600; font-size:.8rem; padding:8px 14px; border-radius:999px; cursor:pointer; user-select:none; }
   .jtp-panel{ display:none; }
-  ${jtTabCssRules}
+  ${jtTabCssRulesOut}
   .jtp-day-badge{ display:inline-block; background:#eef3ef; color:var(--sage-d); font-weight:600; font-size:.78rem; padding:5px 12px; border-radius:999px; margin-bottom:14px; }
   .jtp-meal{ background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden; margin-bottom:14px; }
   .jtp-meal-head{ display:flex; justify-content:space-between; align-items:center; background:#eef3ef; padding:10px 14px; font-weight:700; font-size:.85rem; color:var(--sage-d); }
@@ -11349,7 +11227,6 @@ function exportProgrammePortal(opts){
   DAYS.forEach((dlabel,d)=>{
     const isActiveDay = String(d)===startDay;
     const prog = (c.program&&c.program[d])||{};
-    const isSport = c.sportDays && c.sportDays[d];
     const hasItems = meals.some(m=>(prog[m.id]||[]).length>0);
     const ecarts = (c.ecarts&&c.ecarts[d])||[];
     if(!hasItems && !ecarts.length){
@@ -11409,10 +11286,9 @@ function exportProgrammePortal(opts){
       </div>` : "";
     ecarts.forEach(e=>dayKcal+=n0(e.kcal));
 
-    dayTabs.push(`<label class="wkp-tab" for="wkptab-${d}" data-tab="${d}">${esc(dlabel)}${isSport?" 🏋":""}</label>`);
+    dayTabs.push(`<label class="wkp-tab" for="wkptab-${d}" data-tab="${d}">${esc(dlabel)}</label>`);
     dayPanels.push(`<div class="wkp-panel" id="wkp-day-${d}">
       <div class="wkp-day-summary">
-        <span class="wkp-day-badge">${isSport?"🏋 Jour de sport":"🛌 Repos"}</span>
         <span class="wkp-day-total">${!opts.hideKcal?`${r0(dayKcal)} kcal`:""}${(!opts.hideKcal&&!opts.hideMacros)?" · ":""}${!opts.hideMacros?`P${r0(dayP)} G${r0(dayG)} L${r0(dayL)}`:""}</span>
       </div>
       ${mealsHtml}${ecartsHtml}
