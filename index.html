@@ -916,7 +916,7 @@ tailwind.config = {
             <p class="text-xs mb-4" style="color:#8a9487">Cliquez le <span style="color:#e0354f">cœur</span> à gauche de chaque aliment pour le marquer comme aimé, ou le <span style="color:#c0392b">cercle barré</span> pour l'exclure (allergie / n'aime pas). Pour les aliments aimés, réglez à droite les repas où ils peuvent apparaître.</p>
 
             <div class="flex items-center gap-3 mb-3">
-              <div class="relative flex-1 max-w-xs">
+              <div class="relative flex-1">
                 <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style="color:#aab2a6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z"/></svg>
                 <input id="prefSearch" class="fld pl-9" placeholder="Rechercher un aliment…">
               </div>
@@ -3060,6 +3060,16 @@ function repairFBFoods(db){
         f.cat = "Pains & céréales"; f.fb = false;
         fixed++;
       }
+      // Même famille de bug : le "Beurre" normal (générique, laitier) a pu être
+      // mal classé "Fitness boutique" par confusion avec "Beurre de cacahuète
+      // crunchy... (So Tasty)". On rétablit ici la fiche générique correcte
+      // (Matières grasses, achetable en supermarché normal) si elle a été mal taguée
+      // — sans jamais toucher au vrai "Beurre de cacahuète", qui lui reste FB.
+      if(/^beurre( doux| demi[- ]sel| sale)?$/.test(_fbNorm(f.name)) && (f.cat === "Fitness boutique" || f.fb)){
+        f.kcal=730; f.prot=0.7; f.gluc=0.7; f.lip=81;
+        f.cat = "Matières grasses"; f.fb = false;
+        fixed++;
+      }
     });
   }
   // 1) Corriger la base d'aliments (DB.foods)
@@ -3090,6 +3100,13 @@ function repairFBFoods(db){
             if(_fbNorm(it.name) === "flocons d'avoine"){
               if(it.base.kcal!==370 || it.base.prot!==13 || it.base.gluc!==60 || it.base.lip!==7){
                 it.base = { kcal:370, prot:13, gluc:60, lip:7 };
+                fixedItems++;
+              }
+              return;
+            }
+            if(/^beurre( doux| demi[- ]sel| sale)?$/.test(_fbNorm(it.name))){
+              if(it.base.kcal!==730 || it.base.prot!==0.7 || it.base.gluc!==0.7 || it.base.lip!==81){
+                it.base = { kcal:730, prot:0.7, gluc:0.7, lip:81 };
                 fixedItems++;
               }
               return;
@@ -10529,6 +10546,12 @@ function renderJourneeType() {
         const optKcal  = s.sKcal;
         const fruitTxt = isFruitSlot ? jtFruitPortionText(opt, s.sKcal) : "";
         const compositeScaled = (opt && opt.composite) ? jtCompositeScaled(s, opt) : null;
+        // Équivalent en unités "naturelles" (œufs, bananes, yaourts...) quand l'aliment
+        // s'y prête — un client lit "2 œufs" bien plus facilement que "120g".
+        const unitItem = { name:(opt&&opt.name)||"", grams:optGrams, unitWeight:(opt&&opt.unitWeight)||null };
+        const unitTxt = (!isLegume && !isFruitSlot && opt && isUnitItem(unitItem))
+          ? `≈ ${fmtCount(unitCount(unitItem))} ${pluralUnit(unitName(unitItem), unitCount(unitItem))}`
+          : "";
         const noteKey = `${m.id}-${i}`;
         const noteVal = s.note || "";
         return `
@@ -10575,6 +10598,7 @@ function renderJourneeType() {
                 onmouseover="this.style.color='#c0392b'" onmouseout="this.style.color='#c4cdc2'">✕</button>
             </div>
             <div class="jt-slot-kcal-${m.id}-${i}" style="font-size:11px;color:#8a9487;">~${optKcal} kcal</div>
+            ${unitTxt?`<div style="font-size:11px;color:#5b7d6a;font-weight:600;">${unitTxt}</div>`:""}
           </div>
         </div>
         <div style="padding:0 15px 10px 15px;">
