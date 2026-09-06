@@ -911,7 +911,10 @@ tailwind.config = {
           <div class="card card-pad">
             <div class="flex items-center justify-between mb-1">
               <h3 class="font-display text-lg">Aliments du client</h3>
-              <span id="prefCount" class="chip bg-sage-100 text-sage-700">0 aimés</span>
+              <div class="flex items-center gap-2">
+                <button id="btnFoodPresets" class="btn btn-ghost text-xs py-1.5 px-2.5">📋 Listes de base</button>
+                <span id="prefCount" class="chip bg-sage-100 text-sage-700">0 aimés</span>
+              </div>
             </div>
             <p class="text-xs mb-4" style="color:#8a9487">Cliquez le <span style="color:#e0354f">cœur</span> à gauche de chaque aliment pour le marquer comme aimé, ou le <span style="color:#c0392b">cercle barré</span> pour l'exclure (allergie / n'aime pas). Pour les aliments aimés, réglez à droite les repas où ils peuvent apparaître.</p>
 
@@ -1888,6 +1891,46 @@ tailwind.config = {
 </div>
 
 <!-- ============ MODALE AJOUT ALIMENT AU REPAS ============ -->
+<div id="modalFoodPresets" class="modal-back">
+  <div class="modal-card">
+    <div class="px-6 py-5 border-b border-line flex items-center justify-between">
+      <h3 class="font-display text-lg" id="fpTitle">📋 Listes d'aliments de base</h3>
+      <button data-close class="text-[#aab2a6] hover:text-ink text-xl leading-none">✕</button>
+    </div>
+
+    <!-- Écran 1 : liste des presets -->
+    <div id="fpListScreen" class="px-6 py-5">
+      <p class="text-sm mb-4" style="color:#798376;">
+        Présélectionne une fois pour toutes des aliments courants (ex: "Base classique"), puis applique la liste en un clic sur n'importe quel client pour les marquer tous comme aimés d'un coup.
+      </p>
+      <button id="btnFpNew" class="btn btn-primary text-sm mb-4">+ Nouvelle liste</button>
+      <div id="fpList" class="space-y-2" style="max-height:50vh;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Écran 2 : édition d'un preset (choix des aliments) -->
+    <div id="fpEditScreen" class="hidden px-6 py-5">
+      <div class="flex items-center gap-2 mb-4">
+        <button id="btnFpBack" class="btn btn-ghost text-xs py-1.5 px-2.5">← Retour</button>
+        <span id="fpEditName" class="font-semibold text-sm flex-1"></span>
+        <button id="btnFpRename" class="text-xs" style="color:#5b7d6a;">Renommer</button>
+      </div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="relative flex-1">
+          <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style="color:#aab2a6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z"/></svg>
+          <input id="fpEditSearch" class="fld pl-9" placeholder="Rechercher un aliment…">
+        </div>
+        <select id="fpEditCatFilter" class="fld" style="flex:0 0 auto;max-width:190px;"><option value="">Toutes catégories</option></select>
+      </div>
+      <div id="fpEditCount" class="text-xs mb-2" style="color:#8a9487;"></div>
+      <div id="fpEditList" class="divide-y divide-line" style="max-height:45vh;overflow-y:auto;"></div>
+    </div>
+
+    <div class="px-6 py-4 border-t border-line flex justify-end">
+      <button data-close class="btn btn-ghost">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalPick" class="modal-back">
   <div class="modal-card" style="max-width:600px">
     <div class="px-6 py-5 border-b border-line flex items-center justify-between">
@@ -3335,6 +3378,7 @@ function migrate(db){
   // garde-fous globaux
   if(!Array.isArray(db.foods))   db.foods = [];
   if(!Array.isArray(db.clients)) db.clients = [];
+  if(!Array.isArray(db.foodPresets)) db.foodPresets = []; // listes d'aliments préselectionnées ("Base classique", etc.)
   if(!db.meta || typeof db.meta!=="object") db.meta = { createdAt:Date.now(), updatedAt:Date.now() };
   // normalisation client par client : filet de sécurité ultime (structure toujours complète)
   db.clients = db.clients.map(c=>{ try{ return normalizeClient(c); }catch(e){ console.warn("Client ignoré :",e); return null; } }).filter(Boolean);
@@ -8982,6 +9026,7 @@ function init(){
   initMenuIA();
   initProgrammeAI();
   initJourneeTypeAI();
+  initFoodPresets();
   initAiChats();
   initSuivi();
   document.getElementById("btnEcart").addEventListener("click",addEcart);
@@ -12910,6 +12955,173 @@ async function generateJourneeTypeAI(){
 
 function initJourneeTypeAI(){
   document.getElementById("btnGenererJourneeAI")?.addEventListener("click", generateJourneeTypeAI);
+}
+
+/* =========================================================
+   LISTES D'ALIMENTS DE BASE (presets réutilisables)
+   Permet au coach de présélectionner une fois pour toutes un
+   groupe d'aliments courants (ex: "Base classique"), puis de
+   l'appliquer en un clic sur n'importe quel client pour les
+   marquer tous comme aimés d'un coup — au lieu de recliquer
+   chaque cœur à chaque nouveau client.
+   ========================================================= */
+function ensureFoodPresets(){
+  if(!Array.isArray(DB.foodPresets)) DB.foodPresets = [];
+}
+
+let _fpEditingId = null;
+
+function openFoodPresetsModal(){
+  ensureFoodPresets();
+  _fpEditingId = null;
+  showFpListScreen();
+  show("modalFoodPresets");
+}
+
+function showFpListScreen(){
+  document.getElementById("fpListScreen").classList.remove("hidden");
+  document.getElementById("fpEditScreen").classList.add("hidden");
+  document.getElementById("fpTitle").textContent = "📋 Listes d'aliments de base";
+  renderFpList();
+}
+
+function renderFpList(){
+  const el = document.getElementById("fpList");
+  if(!DB.foodPresets.length){
+    el.innerHTML = `<p class="text-sm" style="color:#aab2a6">Aucune liste pour l'instant — crée ta première liste ci-dessus.</p>`;
+    return;
+  }
+  const c = client();
+  el.innerHTML = DB.foodPresets.map(p=>{
+    const count = (p.foodIds||[]).length;
+    return `<div class="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl" style="background:#f7f8f6;">
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-semibold truncate">${esc(p.name)}</div>
+        <div class="text-xs" style="color:#8a9487">${count} aliment${count>1?'s':''}</div>
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        ${c?`<button data-fp-apply="${p.id}" class="btn btn-primary text-xs py-1.5 px-2.5">Appliquer</button>`:''}
+        <button data-fp-edit="${p.id}" class="btn btn-ghost text-xs py-1.5 px-2.5">Modifier</button>
+        <button data-fp-del="${p.id}" class="text-xs" style="color:#c0392b;padding:4px;">Supprimer</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  el.querySelectorAll("[data-fp-apply]").forEach(b=>b.addEventListener("click",()=>applyFoodPreset(b.dataset.fpApply)));
+  el.querySelectorAll("[data-fp-edit]").forEach(b=>b.addEventListener("click",()=>openFpEditScreen(b.dataset.fpEdit)));
+  el.querySelectorAll("[data-fp-del]").forEach(b=>b.addEventListener("click",()=>deleteFoodPreset(b.dataset.fpDel)));
+}
+
+function applyFoodPreset(presetId){
+  const c = client();
+  if(!c){ toast("Sélectionnez d'abord un client"); return; }
+  const preset = DB.foodPresets.find(p=>p.id===presetId);
+  if(!preset) return;
+  if(!Array.isArray(c.prefs.liked)) c.prefs.liked = [];
+  const before = new Set(c.prefs.liked);
+  let added = 0;
+  (preset.foodIds||[]).forEach(fid=>{
+    if(!DB.foods.some(f=>f.id===fid)) return; // aliment supprimé de la base depuis
+    if(!before.has(fid)){ c.prefs.liked.push(fid); before.add(fid); added++; }
+  });
+  save();
+  renderPrefs();
+  hide("modalFoodPresets");
+  toast(added>0 ? `✓ ${added} aliment(s) ajouté(s) aux aimés de ${c.profile.prenom||"ce client"}` : "Tous les aliments de cette liste étaient déjà aimés");
+}
+
+function createFoodPreset(){
+  const name = prompt("Nom de la liste (ex: Base classique) :");
+  if(!name || !name.trim()) return;
+  ensureFoodPresets();
+  const preset = { id:"fp_"+Math.random().toString(36).slice(2,9), name:name.trim(), foodIds:[] };
+  DB.foodPresets.push(preset);
+  save();
+  openFpEditScreen(preset.id);
+}
+
+function openFpEditScreen(presetId){
+  const preset = DB.foodPresets.find(p=>p.id===presetId);
+  if(!preset) return;
+  _fpEditingId = presetId;
+  document.getElementById("fpListScreen").classList.add("hidden");
+  document.getElementById("fpEditScreen").classList.remove("hidden");
+  document.getElementById("fpTitle").textContent = "📋 Modifier une liste";
+  document.getElementById("fpEditName").textContent = preset.name;
+  document.getElementById("fpEditSearch").value = "";
+
+  const cats=[...new Set(DB.foods.map(f=>f.cat).filter(Boolean))].sort();
+  const catSel = document.getElementById("fpEditCatFilter");
+  catSel.innerHTML = `<option value="">Toutes catégories</option>` + cats.map(x=>`<option>${esc(x)}</option>`).join("");
+  catSel.value = "";
+
+  renderFpEditList();
+}
+
+function renderFpEditList(){
+  const preset = DB.foodPresets.find(p=>p.id===_fpEditingId);
+  if(!preset) return;
+  const q = (document.getElementById("fpEditSearch").value||"").toLowerCase();
+  const cat = document.getElementById("fpEditCatFilter").value;
+  const selected = new Set(preset.foodIds||[]);
+
+  let pool = DB.foods.filter(f=>(!q||f.name.toLowerCase().includes(q))&&(!cat||f.cat===cat));
+  pool.sort((a,b)=>(selected.has(b.id)?1:0)-(selected.has(a.id)?1:0));
+
+  document.getElementById("fpEditCount").textContent = `${selected.size} aliment(s) dans cette liste`;
+
+  const el = document.getElementById("fpEditList");
+  el.innerHTML = pool.slice(0,300).map(f=>{
+    const isSel = selected.has(f.id);
+    return `<label class="flex items-center gap-2.5 px-1 py-2 cursor-pointer">
+      <span data-fp-toggle="${f.id}" class="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style="background:${isSel?'#5b7d6a':'#f0f2ee'};">
+        ${isSel?'<svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>':''}
+      </span>
+      <span class="text-sm flex-1">${esc(f.name)}</span>
+      <span class="text-xs" style="color:#8a9487">${esc(f.cat||"")}</span>
+    </label>`;
+  }).join("");
+
+  el.querySelectorAll("[data-fp-toggle]").forEach(b=>b.addEventListener("click",()=>toggleFpFood(b.dataset.fpToggle)));
+}
+
+function toggleFpFood(foodId){
+  const preset = DB.foodPresets.find(p=>p.id===_fpEditingId);
+  if(!preset) return;
+  if(!Array.isArray(preset.foodIds)) preset.foodIds = [];
+  const idx = preset.foodIds.indexOf(foodId);
+  if(idx>=0) preset.foodIds.splice(idx,1);
+  else preset.foodIds.push(foodId);
+  save();
+  renderFpEditList();
+}
+
+function renameFoodPreset(){
+  const preset = DB.foodPresets.find(p=>p.id===_fpEditingId);
+  if(!preset) return;
+  const name = prompt("Nouveau nom de la liste :", preset.name);
+  if(!name || !name.trim()) return;
+  preset.name = name.trim();
+  save();
+  document.getElementById("fpEditName").textContent = preset.name;
+}
+
+function deleteFoodPreset(presetId){
+  const preset = DB.foodPresets.find(p=>p.id===presetId);
+  if(!preset) return;
+  if(!confirm(`Supprimer la liste "${preset.name}" ?`)) return;
+  DB.foodPresets = DB.foodPresets.filter(p=>p.id!==presetId);
+  save();
+  renderFpList();
+}
+
+function initFoodPresets(){
+  document.getElementById("btnFoodPresets")?.addEventListener("click", openFoodPresetsModal);
+  document.getElementById("btnFpNew")?.addEventListener("click", createFoodPreset);
+  document.getElementById("btnFpBack")?.addEventListener("click", showFpListScreen);
+  document.getElementById("btnFpRename")?.addEventListener("click", renameFoodPreset);
+  document.getElementById("fpEditSearch")?.addEventListener("input", renderFpEditList);
+  document.getElementById("fpEditCatFilter")?.addEventListener("change", renderFpEditList);
 }
 
 /* =========================================================
