@@ -1165,6 +1165,10 @@ tailwind.config = {
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z"/></svg>
             Portail client
           </button>
+          <label class="flex items-center gap-2 text-xs cursor-pointer px-2" style="color:#798376" title="S'applique aux 4 formats d'export ci-dessus (PDF, PDF portail, Excel, page web)">
+            <span id="ckJourneeHideMacros" class="ck" style="width:16px;height:16px;flex-shrink:0;"><svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>
+            Masquer les macros à l'export
+          </label>
           <button id="btnToggleJtChat" class="btn btn-ghost flex items-center gap-2" style="border-color:#c9d6cd;background:#f3f7f3;">
             💬 Assistant IA
           </button>
@@ -9160,6 +9164,7 @@ function init(){
   // journée type
   document.getElementById("journeeClientSelect").addEventListener("change", renderJourneeType);
   document.getElementById("journeeObjectif").addEventListener("change", renderJourneeType);
+  document.getElementById("ckJourneeHideMacros")?.addEventListener("click", e=>e.currentTarget.classList.toggle("on"));
   document.getElementById("btnExportJourneeExcel").addEventListener("click", exportJourneeExcel);
   document.getElementById("btnExportJourneePortal").addEventListener("click", exportJourneePortal);
   document.getElementById("btnExportProgrammePortal").addEventListener("click", exportProgrammePortal);
@@ -10684,6 +10689,7 @@ function pdfSafe(txt) {
 }
 
 function exportJourneePDF() {
+  const jtHideMacros = ()=> !!document.getElementById("ckJourneeHideMacros")?.classList.contains("on");
   const cid = document.getElementById("journeeClientSelect").value;
   if(!cid){ toast("Sélectionnez un client"); return; }
   const c = DB.clients.find(x=>x.id===cid);
@@ -10692,11 +10698,12 @@ function exportJourneePDF() {
   const jsPDFLib = getJsPDF();
   if(!jsPDFLib){ toast("jsPDF non disponible — rechargez la page"); return; }
 
-  _genJourneeTypePDF(jsPDFLib, c);
+  _genJourneeTypePDF(jsPDFLib, c, { hideMacros: jtHideMacros() });
   toast("✓ PDF généré");
 }
 
-function _genJourneeTypePDF(jsPDFLib, c) {
+function _genJourneeTypePDF(jsPDFLib, c, opts) {
+  opts = opts || {};
   const objSel   = jtObjectifSelValue(c);
   const tgt      = jtTargetKcal(c, objSel);
   const mac      = effectiveMacros(c);
@@ -10722,7 +10729,7 @@ function _genJourneeTypePDF(jsPDFLib, c) {
     `${n0(c.profile.age)} ans`, `${n0(c.profile.poids)} kg`,
     `${n0(c.profile.taille)} cm`, objLabel||"",
     `${fmtPdf(tgt)} kcal/j`,
-    `P ${mac.prot}g  G ${mac.gluc}g  L ${mac.lip}g`
+    !opts.hideMacros ? `P ${mac.prot}g  G ${mac.gluc}g  L ${mac.lip}g` : null
   ].filter(Boolean).join("  .  ");
   doc.text(pdfSafe(sub), ML, y); y+=6;
   doc.setLineWidth(0.8); doc.line(ML, y, PW-MR, y); y+=8;
@@ -10735,20 +10742,22 @@ function _genJourneeTypePDF(jsPDFLib, c) {
   doc.setTextColor(0);
 
   // ── Macros cibles (3 colonnes) ───────────────────────────
-  checkY(16);
-  const colW3 = W/3;
-  doc.setLineWidth(0.4); doc.setDrawColor(0);
-  doc.rect(ML, y, W, 14);
-  doc.line(ML+colW3, y, ML+colW3, y+14);
-  doc.line(ML+colW3*2, y, ML+colW3*2, y+14);
-  [["Proteines",mac.prot],["Glucides",mac.gluc],["Lipides",mac.lip]].forEach(([lbl,val],i)=>{
-    const cx = ML+colW3*i+colW3/2;
-    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(80);
-    doc.text(lbl.toUpperCase(), cx, y+5, {align:"center"});
-    doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.setTextColor(0);
-    doc.text(`${val}g`, cx, y+11, {align:"center"});
-  });
-  y+=17;
+  if(!opts.hideMacros){
+    checkY(16);
+    const colW3 = W/3;
+    doc.setLineWidth(0.4); doc.setDrawColor(0);
+    doc.rect(ML, y, W, 14);
+    doc.line(ML+colW3, y, ML+colW3, y+14);
+    doc.line(ML+colW3*2, y, ML+colW3*2, y+14);
+    [["Proteines",mac.prot],["Glucides",mac.gluc],["Lipides",mac.lip]].forEach(([lbl,val],i)=>{
+      const cx = ML+colW3*i+colW3/2;
+      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(80);
+      doc.text(lbl.toUpperCase(), cx, y+5, {align:"center"});
+      doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.setTextColor(0);
+      doc.text(`${val}g`, cx, y+11, {align:"center"});
+    });
+    y+=17;
+  }
 
   // ── Repas ─────────────────────────────────────────────────
   const fbProducts = new Set(); // collecter les produits Fitness Boutique
@@ -10762,7 +10771,7 @@ function _genJourneeTypePDF(jsPDFLib, c) {
     doc.setFont("helvetica","bold"); doc.setFontSize(11);
     doc.text(m.label.toUpperCase(), ML+2, y+5.6);
     doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(100);
-    doc.text(`${m.totalKcal} kcal  P${m.totalP} G${m.totalG} L${m.totalL}`, PW-MR-2, y+5.6, {align:"right"});
+    doc.text(opts.hideMacros ? `${m.totalKcal} kcal` : `${m.totalKcal} kcal  P${m.totalP} G${m.totalG} L${m.totalL}`, PW-MR-2, y+5.6, {align:"right"});
     doc.setTextColor(0); y+=10;
 
     // Colonnes header
@@ -10898,11 +10907,12 @@ function exportJourneePDFPortail(){
   const jsPDFLib = getJsPDF();
   if(!jsPDFLib){ toast("jsPDF non disponible — rechargez la page"); return; }
 
-  _genJourneeTypePDFPortail(jsPDFLib, c);
+  _genJourneeTypePDFPortail(jsPDFLib, c, { hideMacros: !!document.getElementById("ckJourneeHideMacros")?.classList.contains("on") });
   toast("✓ PDF format portail généré");
 }
 
-function _genJourneeTypePDFPortail(jsPDFLib, c){
+function _genJourneeTypePDFPortail(jsPDFLib, c, opts){
+  opts = opts || {};
   const objSel   = jtObjectifSelValue(c);
   const tgt      = jtTargetKcal(c, objSel);
   const mac      = effectiveMacros(c);
@@ -10934,19 +10944,21 @@ function _genJourneeTypePDFPortail(jsPDFLib, c){
   doc.setTextColor(0);
 
   // ── Cartes macros (arrondies) ─────────────────────────────
-  checkY(20);
-  const gap=4, cw=(W-gap*2)/3;
-  [["PROTEINES",mac.prot],["GLUCIDES",mac.gluc],["LIPIDES",mac.lip]].forEach(([lbl,val],i)=>{
-    const cx = ML + i*(cw+gap);
-    doc.setFillColor(...BG); doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
-    rrect(cx, y, cw, 17, 2.5, "FD");
-    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(...MUTED2);
-    doc.text(lbl, cx+cw/2, y+6.5, {align:"center"});
-    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(...SAGE_D);
-    doc.text(`${val}g`, cx+cw/2, y+13, {align:"center"});
-  });
-  y += 17+9;
-  doc.setTextColor(0);
+  if(!opts.hideMacros){
+    checkY(20);
+    const gap=4, cw=(W-gap*2)/3;
+    [["PROTEINES",mac.prot],["GLUCIDES",mac.gluc],["LIPIDES",mac.lip]].forEach(([lbl,val],i)=>{
+      const cx = ML + i*(cw+gap);
+      doc.setFillColor(...BG); doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
+      rrect(cx, y, cw, 17, 2.5, "FD");
+      doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(...MUTED2);
+      doc.text(lbl, cx+cw/2, y+6.5, {align:"center"});
+      doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(...SAGE_D);
+      doc.text(`${val}g`, cx+cw/2, y+13, {align:"center"});
+    });
+    y += 17+9;
+    doc.setTextColor(0);
+  }
 
   // ── Bandeau section REPAS ─────────────────────────────────
   checkY(12);
@@ -10966,7 +10978,7 @@ function _genJourneeTypePDFPortail(jsPDFLib, c){
     doc.setFont("helvetica","bold"); doc.setFontSize(10.5); doc.setTextColor(...SAGE_D);
     doc.text(pdfSafe(m.label.toUpperCase()), ML+3, y+5.5);
     doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
-    doc.text(pdfSafe(`${m.totalKcal} kcal   P${m.totalP} G${m.totalG} L${m.totalL}`), PW-MR-3, y+5.5, {align:"right"});
+    doc.text(pdfSafe(opts.hideMacros ? `${m.totalKcal} kcal` : `${m.totalKcal} kcal   P${m.totalP} G${m.totalG} L${m.totalL}`), PW-MR-3, y+5.5, {align:"right"});
     doc.setTextColor(0); y += 8+3;
 
     m.slots.forEach(s=>{
@@ -11089,6 +11101,7 @@ function exportJourneePortal(){
   if(!cid){ toast("Sélectionnez un client"); return; }
   const c = DB.clients.find(x=>x.id===cid);
   if(!c){ return; }
+  const hideMacros = !!document.getElementById("ckJourneeHideMacros")?.classList.contains("on");
 
   const objSel   = jtObjectifSelValue(c);
   const mac      = effectiveMacros(c);
@@ -11151,7 +11164,7 @@ function exportJourneePortal(){
       return `<div class="jtp-meal">
         <div class="jtp-meal-head">
           <span>${esc(m.label.toUpperCase())}</span>
-          <span class="jtp-meal-macros">${m.totalKcal} kcal · P${m.totalP} G${m.totalG} L${m.totalL}</span>
+          <span class="jtp-meal-macros">${m.totalKcal} kcal${hideMacros?'':` · P${m.totalP} G${m.totalG} L${m.totalL}`}</span>
         </div>
         ${slotsHtml}
       </div>`;
@@ -11256,11 +11269,11 @@ function exportJourneePortal(){
       <h1>Journée type — ${esc(fullName)}</h1>
       <div class="jtp-sub">${objLabel?esc(objLabel):"Choisissez un onglet ci-dessous"}</div>
     </div>
-    <div class="jtp-macros">
+    ${hideMacros ? '' : `<div class="jtp-macros">
       <div class="jtp-macro-card"><div class="lbl">Protéines</div><div class="val">${mac.prot}g</div></div>
       <div class="jtp-macro-card"><div class="lbl">Glucides</div><div class="val">${mac.gluc}g</div></div>
       <div class="jtp-macro-card"><div class="lbl">Lipides</div><div class="val">${mac.lip}g</div></div>
-    </div>
+    </div>`}
     ${bodyContentHtml}
     <div class="jtp-footer">Yael Coach Sport et Nutrition · Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
   </div>
@@ -11269,7 +11282,7 @@ function exportJourneePortal(){
 
   const blob = new Blob([html], {type:"text/html"});
   download(blob, `portail-journee-type-${slug(c)}.html`);
-  toast("✓ Portail journée type généré (repos + sport)");
+  toast("✓ Portail journée type généré");
 }
 
 /* =========================================================
@@ -11546,6 +11559,7 @@ function exportProgrammePortal(opts){
 }
 
 function exportJourneeExcel() {
+  const hideMacros = !!document.getElementById("ckJourneeHideMacros")?.classList.contains("on");
   const cid = document.getElementById("journeeClientSelect").value;
   if(!cid){ toast("Sélectionnez un client"); return; }
   const c = DB.clients.find(x=>x.id===cid);
@@ -11561,12 +11575,12 @@ function exportJourneeExcel() {
   const aoa = [];
   aoa.push([`Journée type — ${c.profile.prenom||""} ${c.profile.nom||""}`.trim()]);
   aoa.push([`${n0(c.profile.age)} ans · ${n0(c.profile.poids)} kg · ${n0(c.profile.taille)} cm · ${objLabel}`]);
-  aoa.push([`Cible : ${r0(tgt)} kcal/jour · P ${mac.prot}g · G ${mac.gluc}g · L ${mac.lip}g`]);
+  aoa.push([hideMacros ? `Cible : ${r0(tgt)} kcal/jour` : `Cible : ${r0(tgt)} kcal/jour · P ${mac.prot}g · G ${mac.gluc}g · L ${mac.lip}g`]);
   aoa.push([]);
   meals.forEach(m => {
     if(m.disabled) return;
     window._jtOptClient = c; window._jtCurMealId = m.id;
-    aoa.push([`${m.label} — ${m.totalKcal} kcal (P${m.totalP} G${m.totalG} L${m.totalL})`]);
+    aoa.push([hideMacros ? `${m.label} — ${m.totalKcal} kcal` : `${m.label} — ${m.totalKcal} kcal (P${m.totalP} G${m.totalG} L${m.totalL})`]);
     aoa.push(["Catégorie","Choix possibles (équivalences)","≈ Kcal cible","Note"]);
     m.slots.forEach(s => {
       const optsTxt = s.cat==="legum"
