@@ -1907,7 +1907,11 @@ tailwind.config = {
       <p class="text-sm mb-4" style="color:#798376;">
         Présélectionne une fois pour toutes des aliments courants (ex: "Base classique"), puis applique la liste en un clic sur n'importe quel client pour les marquer tous comme aimés d'un coup.
       </p>
-      <button id="btnFpNew" class="btn btn-primary text-sm mb-4">+ Nouvelle liste</button>
+      <button id="btnFpNew" class="btn btn-primary text-sm mb-2">+ Nouvelle liste</button>
+      <div class="flex items-center gap-2 mb-4">
+        <select id="fpImportClientSelect" class="fld" style="flex:1;"><option value="">Importer les aimés d'un client…</option></select>
+        <button id="btnFpImportClient" class="btn btn-ghost text-sm whitespace-nowrap">📥 Créer depuis ce client</button>
+      </div>
       <div id="fpList" class="space-y-2" style="max-height:50vh;overflow-y:auto;"></div>
     </div>
 
@@ -1917,6 +1921,10 @@ tailwind.config = {
         <button id="btnFpBack" class="btn btn-ghost text-xs py-1.5 px-2.5">← Retour</button>
         <span id="fpEditName" class="font-semibold text-sm flex-1"></span>
         <button id="btnFpRename" class="text-xs" style="color:#5b7d6a;">Renommer</button>
+      </div>
+      <div class="flex items-center gap-2 mb-3">
+        <select id="fpEditImportClientSelect" class="fld" style="flex:1;"><option value="">Ajouter les aimés d'un client…</option></select>
+        <button id="btnFpEditImportClient" class="btn btn-ghost text-sm whitespace-nowrap">📥 Ajouter à la liste</button>
       </div>
       <div class="flex items-center gap-2 mb-3">
         <div class="relative flex-1">
@@ -12992,8 +13000,58 @@ let _fpEditingId = null;
 function openFoodPresetsModal(){
   ensureFoodPresets();
   _fpEditingId = null;
+  populateFpClientSelects();
   showFpListScreen();
   show("modalFoodPresets");
+}
+
+function populateFpClientSelects(){
+  const opts = DB.clients.map(cl=>
+    `<option value="${cl.id}">${esc(cl.profile.prenom||"")} ${esc(cl.profile.nom||"")}</option>`
+  ).join("");
+  const sel1 = document.getElementById("fpImportClientSelect");
+  const sel2 = document.getElementById("fpEditImportClientSelect");
+  if(sel1) sel1.innerHTML = `<option value="">Importer les aimés d'un client…</option>` + opts;
+  if(sel2) sel2.innerHTML = `<option value="">Ajouter les aimés d'un client…</option>` + opts;
+}
+
+function createFoodPresetFromClient(){
+  const cid = document.getElementById("fpImportClientSelect").value;
+  if(!cid){ toast("Sélectionnez un client à importer"); return; }
+  const cl = DB.clients.find(x=>x.id===cid);
+  if(!cl){ return; }
+  const likedIds = (cl.prefs && cl.prefs.liked) || [];
+  if(!likedIds.length){ toast("Ce client n'a aucun aliment aimé pour l'instant"); return; }
+  const fullName = `${cl.profile.prenom||""} ${cl.profile.nom||""}`.trim() || "ce client";
+  const name = prompt("Nom de la nouvelle liste :", `Aliments de ${fullName}`);
+  if(!name || !name.trim()) return;
+  ensureFoodPresets();
+  const preset = { id:"fp_"+Math.random().toString(36).slice(2,9), name:name.trim(), foodIds:[...likedIds] };
+  DB.foodPresets.push(preset);
+  save();
+  toast(`✓ Liste créée avec ${likedIds.length} aliment(s) de ${fullName}`);
+  openFpEditScreen(preset.id);
+}
+
+function importClientLikedIntoPreset(){
+  const preset = DB.foodPresets.find(p=>p.id===_fpEditingId);
+  if(!preset) return;
+  const cid = document.getElementById("fpEditImportClientSelect").value;
+  if(!cid){ toast("Sélectionnez un client à importer"); return; }
+  const cl = DB.clients.find(x=>x.id===cid);
+  if(!cl){ return; }
+  const likedIds = (cl.prefs && cl.prefs.liked) || [];
+  if(!Array.isArray(preset.foodIds)) preset.foodIds = [];
+  const before = new Set(preset.foodIds);
+  let added = 0;
+  likedIds.forEach(fid=>{
+    if(!before.has(fid)){ preset.foodIds.push(fid); before.add(fid); added++; }
+  });
+  save();
+  renderFpEditList();
+  document.getElementById("fpEditImportClientSelect").value = "";
+  const fullName = `${cl.profile.prenom||""} ${cl.profile.nom||""}`.trim() || "ce client";
+  toast(added>0 ? `✓ ${added} aliment(s) de ${fullName} ajouté(s) à la liste` : `Tous les aliments aimés de ${fullName} étaient déjà dans cette liste`);
 }
 
 function showFpListScreen(){
@@ -13067,6 +13125,8 @@ function openFpEditScreen(presetId){
   document.getElementById("fpTitle").textContent = "📋 Modifier une liste";
   document.getElementById("fpEditName").textContent = preset.name;
   document.getElementById("fpEditSearch").value = "";
+  const editImportSel = document.getElementById("fpEditImportClientSelect");
+  if(editImportSel) editImportSel.value = "";
 
   const cats=[...new Set(DB.foods.map(f=>f.cat).filter(Boolean))].sort();
   const catSel = document.getElementById("fpEditCatFilter");
@@ -13136,6 +13196,8 @@ function deleteFoodPreset(presetId){
 function initFoodPresets(){
   document.getElementById("btnFoodPresets")?.addEventListener("click", openFoodPresetsModal);
   document.getElementById("btnFpNew")?.addEventListener("click", createFoodPreset);
+  document.getElementById("btnFpImportClient")?.addEventListener("click", createFoodPresetFromClient);
+  document.getElementById("btnFpEditImportClient")?.addEventListener("click", importClientLikedIntoPreset);
   document.getElementById("btnFpBack")?.addEventListener("click", showFpListScreen);
   document.getElementById("btnFpRename")?.addEventListener("click", renameFoodPreset);
   document.getElementById("fpEditSearch")?.addEventListener("input", renderFpEditList);
