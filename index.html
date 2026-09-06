@@ -9497,8 +9497,12 @@ const JT_CAT_FOODCATS = {
 // - bons lipides sous les légumes (oléagineux, avocat, ET toutes les huiles aimées —
 //   dans la base les huiles sont classées "Lipides"/"Matières grasses", la même catégorie
 //   que le beurre, donc on les repère aussi par leur nom pour qu'elles apparaissent ici)
-function jtFoodCatsForSlot(s){
+function jtFoodCatsForSlot(s, mealId){
   if(s.cat==="mg") return s.isDefaultGoodFat ? ["oleagineux","graine"] : ["matiere grasse","lipide"];
+  // Au petit-déjeuner, le slot "Glucides" ne doit proposer que du pain/céréales/flocons —
+  // jamais du riz, des pâtes, des pommes de terre ou des légumineuses (catégorie "Féculents"
+  // générique), qui eux restent réservés au déjeuner/dîner.
+  if(s.cat==="fecu" && mealId==="petitdej") return ["pain","cereale"];
   return JT_CAT_FOODCATS[s.cat] || [];
 }
 
@@ -9506,10 +9510,10 @@ function jtFoodCatsForSlot(s){
    (et non exclus) dont la catégorie correspond au slot. Aucun aliment non aimé n'apparaît
    par défaut. Si aucun aliment aimé ne correspond, renvoie un placeholder neutre (pas un
    aliment générique) pour que le calcul kcal/macros reste possible. */
-function jtLikedOptionsForSlot(c, s){
+function jtLikedOptionsForSlot(c, s, mealId){
   const likedIds    = new Set((c && c.prefs && c.prefs.liked)     || []);
   const excludedIds = new Set((c && c.prefs && c.prefs.excluded)  || []);
-  const catKeywords  = jtFoodCatsForSlot(s);
+  const catKeywords  = jtFoodCatsForSlot(s, mealId);
   const isGoodFat    = s.cat==="mg" && s.isDefaultGoodFat;
   const isComplSlot  = s.cat==="compl";
   const found = (DB.foods||[]).filter(f=>{
@@ -9623,7 +9627,7 @@ function buildJourneeType(c) {
 
     // Préremplissage par défaut : chaque slot ne propose QUE les aliments aimés du client
     // (correspondant à sa catégorie). Aucun autre aliment n'apparaît par défaut.
-    baseSlots = baseSlots.map(s => ({ ...s, options: jtLikedOptionsForSlot(c, s) }));
+    baseSlots = baseSlots.map(s => ({ ...s, options: jtLikedOptionsForSlot(c, s, m.id) }));
 
     const removedIdx = (c.journeeType&&c.journeeType.removedSlots&&c.journeeType.removedSlots[m.id])||[];
     // Appliquer l'ordre personnalisé du coach (par indices d'origine dans baseSlots)
@@ -12800,7 +12804,7 @@ function buildJourneeTypeAIPrompt(c, opts){
       origIdx: idx,
       cat: s.cat,
       label: s.label,
-      liked_options: jtLikedOptionsForSlot(c, s).filter(o=>!o._placeholder).map(o=>o.name)
+      liked_options: jtLikedOptionsForSlot(c, s, m.id).filter(o=>!o._placeholder).map(o=>o.name)
     }));
     return {
       mealId: m.id,
