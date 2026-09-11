@@ -12582,7 +12582,8 @@ RÈGLES ABSOLUES :
 3. Pour chaque jour, ne génère QUE les repas listés dans "repas_a_generer" (les autres repas de la journée sont déjà remplis et verrouillés par le coach — n'en parle pas).
 4. Le total kcal/macros de chaque jour (somme des repas générés) doit approcher au mieux "cible_kcal"/"cible_proteines"/"cible_glucides"/"cible_lipides" (écart max ±8%).
 5. Grammages réalistes, arrondis à 5g près.
-6. Tu n'as PAS besoin de calculer kcal/macros par aliment : l'application les recalcule elle-même depuis sa base de données à partir de l'id et du grammage. Renvoie uniquement "foodId" et "grammes".`;
+6. Tu n'as PAS besoin de calculer kcal/macros par aliment : l'application les recalcule elle-même depuis sa base de données à partir de l'id et du grammage. Renvoie uniquement "foodId" et "grammes".
+7. Compose des repas RÉALISTES à la française, pas juste le minimum pour atteindre les macros. Pour un déjeuner ou un dîner, pense structure complète : protéine + légume + féculent + matière grasse, ET termine par un laitage (yaourt, fromage blanc) ou un fruit/compote quand la liste d'aliments disponibles en propose et que le budget calorique le permet — n'omets pas ces aliments simplement parce qu'ils ne sont pas indispensables pour atteindre la cible. Varie aussi les choix d'un repas à l'autre plutôt que de répéter toujours les mêmes aliments.`;
 
   const userMsg = `Génère le contenu des repas manquants pour ce client, jour par jour.
 
