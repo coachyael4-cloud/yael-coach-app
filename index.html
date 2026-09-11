@@ -1513,7 +1513,7 @@ tailwind.config = {
         </div>
       </div>
       <div id="suiviForm" class="card card-pad hidden">
-        <h3 class="font-semibold mb-4">Nouvelle séance</h3>
+        <h3 class="font-semibold mb-4" id="suiviFormTitle">Nouvelle séance</h3>
         <div class="grid gap-3" style="grid-template-columns:1fr 1fr">
           <div><label class="fld-lbl">Date</label><input type="date" id="suiviDate" class="fld"></div>
           <div><label class="fld-lbl">Poids (kg)</label><input type="number" step="0.1" id="suiviPoidsInput" class="fld num" placeholder="ex: 77.5"></div>
@@ -1535,16 +1535,6 @@ tailwind.config = {
       <div id="suiviChartWrap" class="card card-pad hidden">
         <p class="fld-lbl mb-3">Évolution du poids</p>
         <div id="suiviChart" style="width:100%;overflow-x:auto;"></div>
-      </div>
-
-      <!-- Bilan micronutriments semaine -->
-      <div id="microBilanWrap" class="card card-pad hidden">
-        <div class="flex items-center justify-between mb-3">
-          <p class="fld-lbl mb-0">Bilan nutritionnel — semaine en cours</p>
-          <span class="text-xs" style="color:#8a9487;">vs ANC adultes (ANSES 2021)</span>
-        </div>
-        <div id="microBilanList" class="space-y-2"></div>
-        <p class="text-xs mt-3" style="color:#aab2a6;font-style:italic;">* Basé sur les aliments renseignés dans la base. La vitamine D est souvent sous-estimée (sources solaires non comptabilisées).</p>
       </div>
 
       <div id="suiviList" class="space-y-3"></div>
@@ -5464,45 +5454,6 @@ function applyRecToMacros(){
    ================================================================ */
 
 /* ANC adultes 18-50 ans — ANSES 2021 (pour 7 jours) */
-const ANC_SEMAINE = {
-  Fibres_g:     { val:175, unit:"g",  label:"Fibres",       color:"#8a9487", tip:"25g/j min — transit, glycémie" },
-  Calcium_mg:   { val:5600, unit:"mg", label:"Calcium",      color:"#3a7bd5", tip:"800mg/j — os, muscles" },
-  Fer_mg:       { val:91,   unit:"mg", label:"Fer",          color:"#c0392b", tip:"13mg/j H · 16mg/j F — globules rouges" },
-  Magnesium_mg: { val:2100, unit:"mg", label:"Magnésium",    color:"#27ae60", tip:"300mg/j — énergie, récupération" },
-  VitC_mg:      { val:630,  unit:"mg", label:"Vitamine C",   color:"#f39c12", tip:"90mg/j — immunité, antioxydant" },
-  VitD_µg:      { val:105,  unit:"µg", label:"Vitamine D",   color:"#e67e22", tip:"15µg/j — os, immunité (souvent déficitaire)" },
-  VitB12_µg:    { val:17.5, unit:"µg", label:"Vitamine B12", color:"#9b59b6", tip:"2.5µg/j — neurologie, globules rouges" },
-  Omega3_g:     { val:15.4, unit:"g",  label:"Oméga-3",      color:"#1abc9c", tip:"2.2g/j — cœur, cerveau, anti-inflam." },
-  Sel_g:        { val:35,   unit:"g",  label:"Sel",          color:"#e74c3c", tip:"<5g/j OMS — limite à ne pas dépasser", isLimit:true },
-};
-
-/* Calcule les apports en micros sur la semaine complète */
-function calcMicrosWeek(c){
-  const totals = Object.fromEntries(Object.keys(ANC_SEMAINE).map(k=>[k,0]));
-  const meals  = getMeals(c);
-  // Index foods par id ET par nom pour le fallback
-  const foodById   = {};
-  const foodByName = {};
-  DB.foods.forEach(f=>{ if(!f) return; foodById[f.id]=f; foodByName[(f.name||"").toLowerCase().trim()]=f; });
-  DAYS.forEach((_,d)=>{
-    meals.forEach(m=>{
-      ((c.program[d]&&c.program[d][m.id])||[]).forEach(it=>{
-        if(!it||!it.base) return;
-        // Chercher par foodId d'abord, puis par nom
-        const food = (it.foodId && foodById[it.foodId])
-                  || foodByName[(it.name||"").toLowerCase().trim()];
-        if(!food) return;
-        const factor = n0(it.grams) / 100;
-        Object.keys(ANC_SEMAINE).forEach(k=>{
-          const v = parseFloat(food[k]);
-          if(!isNaN(v)) totals[k] += v * factor;
-        });
-      });
-    });
-  });
-  return totals;
-}
-
 /* Repères PNNS 4 (ANSES/HCSP 2025) — source : mangerbouger.fr
    max:null = pas de limite supérieure (plus = mieux)
    max:X    = limite à ne pas dépasser (alerte rouge au-dessus)
@@ -8703,42 +8654,6 @@ function doImportProgram(){
 
 /* Graphique SVG poids — pur SVG, pas de dépendance */
 
-function renderMicroBilan(c){
-  const wrap = document.getElementById("microBilanWrap");
-  const list = document.getElementById("microBilanList");
-  if(!wrap||!list||!c) return;
-
-  // Vérifier qu'il y a des données dans le programme
-  const hasItems = DAYS.some((_,d)=>getMeals(c).some(m=>((c.program[d]&&c.program[d][m.id])||[]).length>0));
-  if(!hasItems){ wrap.classList.add("hidden"); return; }
-
-  const totals = calcMicrosWeek(c);
-  const items  = Object.entries(ANC_SEMAINE).map(([k,anc])=>{
-    const v    = totals[k]||0;
-    const pct  = Math.min(150, Math.round(v / Math.max(0.01, anc.val) * 100));
-    const ok   = anc.isLimit ? v <= anc.val : v >= anc.val * 0.75;
-    const over = anc.isLimit && v > anc.val;
-    const color = over ? "#c0392b" : ok ? "#27ae60" : "#d4861c";
-    const icon  = over ? "⚠" : ok ? "✓" : "·";
-    // Formater la valeur selon l'unité
-    const fmtV = v >= 100 ? Math.round(v) : v.toFixed(1);
-    const fmtA = anc.val >= 100 ? Math.round(anc.val) : anc.val.toFixed(1);
-    const suffix = anc.isLimit ? " (limite)" : "/sem";
-    return `<div title="${anc.tip}">
-      <div class="flex justify-between text-xs mb-0.5">
-        <span style="color:${color};font-weight:${ok||over?600:400};">${icon} ${anc.label}</span>
-        <span class="num text-xs" style="color:${color};">${fmtV} ${anc.unit} / ${fmtA} ${anc.unit}${suffix}</span>
-      </div>
-      <div class="bar-track" style="height:5px;">
-        <div style="width:${pct}%;background:${color};height:5px;border-radius:3px;transition:width .3s;"></div>
-      </div>
-    </div>`;
-  }).join("");
-
-  list.innerHTML = items;
-  wrap.classList.remove("hidden");
-}
-
 function renderSuiviChart(entries){
   const wrap = document.getElementById("suiviChartWrap");
   const el   = document.getElementById("suiviChart");
@@ -8807,7 +8722,6 @@ function renderSuivi(){
   if(!c.historique || !Array.isArray(c.historique)) c.historique = [];
   const entries = [...c.suivi].sort((a,b)=>b.date.localeCompare(a.date));
   renderSuiviChart(entries);
-  renderMicroBilan(c);
 
   // En-tête
   const nameEl = document.getElementById("suiviClientName");
@@ -8843,7 +8757,10 @@ function renderSuivi(){
           <span class="font-semibold">${new Date(e.date).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</span>
           ${e.poids?`<span class="chip bg-sage-100 text-sage-700 ml-2">${e.poids} kg</span>`:""}
         </div>
-        <button data-del-suivi="${i}" class="text-[#c4cdc2] hover:text-[#c0392b] text-xs">✕</button>
+        <div class="flex items-center gap-3 flex-shrink-0">
+          <button data-edit-suivi="${i}" class="text-[#8a9487] hover:text-[#37503f] text-xs">✎ Modifier</button>
+          <button data-del-suivi="${i}" class="text-[#c4cdc2] hover:text-[#c0392b] text-xs">✕</button>
+        </div>
       </div>
       <div class="grid gap-1 text-xs" style="grid-template-columns:repeat(2,1fr);color:#798376;">
         ${e.taille?`<span>Tour taille : <strong>${e.taille} cm</strong></span>`:""}
@@ -8854,18 +8771,53 @@ function renderSuivi(){
       ${e.note?`<div class="mt-2 text-sm" style="color:#485246;background:#f6f7f5;border-radius:8px;padding:8px 10px;">${esc(e.note)}</div>`:""}
     </div>`).join("");
 
+  listEl.querySelectorAll("[data-edit-suivi]").forEach(b=>b.addEventListener("click",()=>{
+    const idx = +b.dataset.editSuivi;
+    const e = entries[idx];
+    if(!e) return;
+    // entries est trié (plus récent en premier) — retrouver l'index réel dans c.suivi
+    _editingSuiviIndex = c.suivi.indexOf(e);
+    document.getElementById("suiviFormTitle").textContent = "Modifier la séance";
+    document.getElementById("suiviDate").value = e.date||"";
+    document.getElementById("suiviPoidsInput").value = e.poids ?? "";
+    document.getElementById("suiviTaille").value = e.taille ?? "";
+    document.getElementById("suiviHanche").value = e.hanche ?? "";
+    document.getElementById("suiviBras").value = e.bras ?? "";
+    document.getElementById("suiviMG").value = e.mg ?? "";
+    document.getElementById("suiviNote").value = e.note || "";
+    document.getElementById("suiviForm").classList.remove("hidden");
+    document.getElementById("suiviForm").scrollIntoView({behavior:"smooth", block:"center"});
+  }));
+
   listEl.querySelectorAll("[data-del-suivi]").forEach(b=>b.addEventListener("click",()=>{
     const idx = +b.dataset.delSuivi;
-    c.suivi.splice(idx,1); save(); renderSuivi();
+    const e = entries[idx];
+    const realIdx = c.suivi.indexOf(e);
+    if(realIdx>=0) c.suivi.splice(realIdx,1);
+    save(); renderSuivi();
   }));
+}
+
+let _editingSuiviIndex = null; // null = ajout d'une nouvelle séance, sinon index dans c.suivi en cours de modification
+
+function resetSuiviForm(){
+  _editingSuiviIndex = null;
+  document.getElementById("suiviFormTitle").textContent = "Nouvelle séance";
+  ["suiviDate","suiviPoidsInput","suiviTaille","suiviHanche","suiviBras","suiviMG","suiviNote"].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value="";
+  });
 }
 
 function initSuivi(){
   document.getElementById("btnAddSuivi")?.addEventListener("click",()=>{
-    document.getElementById("suiviForm").classList.toggle("hidden");
+    const form = document.getElementById("suiviForm");
+    const willShow = form.classList.contains("hidden");
+    if(willShow) resetSuiviForm();
+    form.classList.toggle("hidden");
   });
   document.getElementById("btnCancelSuivi")?.addEventListener("click",()=>{
     document.getElementById("suiviForm").classList.add("hidden");
+    resetSuiviForm();
   });
   document.getElementById("btnSaveSuivi")?.addEventListener("click",()=>{
     const c=client(); if(!c) return;
@@ -8883,15 +8835,18 @@ function initSuivi(){
     };
     // Mettre à jour le poids dans le profil client si renseigné
     if(entry.poids) c.profile.poids = entry.poids;
-    c.suivi.push(entry);
+
+    const isEditing = _editingSuiviIndex !== null && c.suivi[_editingSuiviIndex];
+    if(isEditing){
+      c.suivi[_editingSuiviIndex] = entry;
+    } else {
+      c.suivi.push(entry);
+    }
     save();
-    // Reset form
-    ["suiviPoidsInput","suiviTaille","suiviHanche","suiviBras","suiviMG","suiviNote"].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.value="";
-    });
     document.getElementById("suiviForm").classList.add("hidden");
+    resetSuiviForm();
     renderSuivi(); renderProfil();
-    toast(`✓ Séance du ${new Date(date).toLocaleDateString("fr-FR")} enregistrée`);
+    toast(isEditing ? `✓ Séance du ${new Date(date).toLocaleDateString("fr-FR")} modifiée` : `✓ Séance du ${new Date(date).toLocaleDateString("fr-FR")} enregistrée`);
   });
 }
 
