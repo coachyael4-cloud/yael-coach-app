@@ -527,6 +527,10 @@ tailwind.config = {
           Nouveau client
         </button>
       </div>
+      <div class="relative mb-5" style="max-width:360px;">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style="color:#aab2a6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z"/></svg>
+        <input id="clientSearch" class="fld pl-9" placeholder="Rechercher un client…">
+      </div>
       <div id="clientGrid" class="grid-clients"><!-- rendu JS --></div>
     </section>
 
@@ -4120,7 +4124,13 @@ function setActive(id){ activeClientId=id; activeDay=0; try{ localStorage.setIte
 function renderClients(){
   syncAllAges(); // garantit que les âges affichés sont à jour même après un import/ajout
   const grid=document.getElementById("clientGrid");
-  const cards = DB.clients.map(c=>{
+  const searchEl = document.getElementById("clientSearch");
+  const q = noAccent((searchEl && searchEl.value || "").trim().toLowerCase());
+  const filtered = !q ? DB.clients : DB.clients.filter(c=>{
+    const full = noAccent(`${c.profile.prenom||""} ${c.profile.nom||""}`.toLowerCase());
+    return full.includes(q);
+  });
+  const cards = filtered.map(c=>{
     const init=((c.profile.prenom[0]||"")+(c.profile.nom[0]||"")).toUpperCase()||"–";
     const tgt=targetKcal(c);
     const mac=effectiveMacros(c);
@@ -4150,7 +4160,7 @@ function renderClients(){
       </div>
     </article>`;
   }).join("");
-  grid.innerHTML = cards + `<button id="btnNewClient2" class="card border-dashed flex flex-col items-center justify-center gap-2 py-9 text-[#8a9487] hover:border-sage-500 hover:text-sage-600 transition">
+  grid.innerHTML = cards + (q && !filtered.length ? `<p class="text-sm col-span-full" style="color:#aab2a6">Aucun client ne correspond à « ${esc(searchEl.value.trim())} ».</p>` : "") + `<button id="btnNewClient2" class="card border-dashed flex flex-col items-center justify-center gap-2 py-9 text-[#8a9487] hover:border-sage-500 hover:text-sage-600 transition">
       <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
       <span class="text-sm font-medium">Ajouter un client</span></button>`;
 
@@ -8957,6 +8967,7 @@ function init(){
 
   // clients
   document.getElementById("btnNewClient").addEventListener("click",newClient);
+  document.getElementById("clientSearch")?.addEventListener("input", renderClients);
 
   // profil
   bindProfilInputs();
