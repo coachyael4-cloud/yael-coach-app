@@ -12006,6 +12006,36 @@ function aiActiveProviderLabel(){
 }
 
 /* ---- Appels bruts par fournisseur ---- */
+/* Erreurs temporaires côté serveur IA (surcharge, quota momentané...) — ça vaut le coup
+   de réessayer tout seul plutôt que de faire recliquer le coach à chaque fois. */
+const AI_TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+function aiIsTransientError(e){
+  if(e && AI_TRANSIENT_STATUSES.has(e.status)) return true;
+  const msg = String((e&&e.message)||"").toLowerCase();
+  return /overloaded|high demand|unavailable|try again|rate limit|service.{0,10}unavailable/.test(msg);
+}
+
+/* Réessaie fn() avec un délai croissant (1.5s, 3s, 6s, 10s) tant que l'erreur est temporaire,
+   jusqu'à 5 tentatives au total. onProgress(attempt, maxAttempts, delayMs) permet d'afficher
+   une info visuelle pendant l'attente plutôt que de laisser le coach face à un écran figé. */
+async function aiWithRetry(fn, onProgress){
+  const maxAttempts = 5;
+  const delays = [1500, 3000, 6000, 10000];
+  let lastErr;
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    try{
+      return await fn();
+    }catch(e){
+      lastErr = e;
+      if(attempt===maxAttempts || !aiIsTransientError(e)) throw e;
+      const delay = delays[attempt-1] || 10000;
+      if(onProgress) onProgress(attempt, maxAttempts, delay, e);
+      await new Promise(r=>setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 async function aiCallClaude(system,userMsg,apiKey,model){
   const res = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
@@ -12022,7 +12052,7 @@ async function aiCallClaude(system,userMsg,apiKey,model){
       messages:[{role:"user",content:userMsg}]
     })
   });
-  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("Claude ("+res.status+") "+t.slice(0,180)); }
+  if(!res.ok){ const t=await res.text().catch(()=>""); const err=new Error("Claude ("+res.status+") "+t.slice(0,180)); err.status=res.status; throw err; }
   const data = await res.json();
   return (data.content||[]).map(b=>b.text||"").join("");
 }
@@ -12107,14 +12137,17 @@ async function aiCallOpenAI(system,userMsg,apiKey,model){
       temperature:0.7
     })
   });
-  if(!res.ok){ const t=await res.text().catch(()=>""); throw new Error("GPT ("+res.status+") "+t.slice(0,180)); }
+  if(!res.ok){ const t=await res.text().catch(()=>""); const err=new Error("GPT ("+res.status+") "+t.slice(0,180)); err.status=res.status; throw err; }
   const data = await res.json();
   return (data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";
 }
 
 /* Essaie les fournisseurs dans l'ordre de priorité (le premier avec une clé configurée gagne),
-   et bascule automatiquement sur le suivant en cas d'échec (clé invalide, quota dépassé...). */
-async function callAI(system,userMsg){
+   et bascule automatiquement sur le suivant en cas d'échec (clé invalide, quota dépassé...).
+   Les erreurs temporaires (surcharge serveur, 503...) sont réessayées automatiquement sur
+   place (jusqu'à 5 tentatives, délai croissant) avant de passer au fournisseur suivant —
+   onProgress(provider, attempt, maxAttempts, delayMs) permet d'afficher le statut en direct. */
+async function callAI(system,userMsg,onProgress){
   const cfg = AI_CONFIG;
   const providers = {
     claude:{ key:cfg.claudeKey, fn:()=>aiCallClaude(system,userMsg,cfg.claudeKey,cfg.claudeModel) },
@@ -12127,7 +12160,9 @@ async function callAI(system,userMsg){
     const prov = providers[p];
     if(!prov || !prov.key) continue;
     try{
-      const raw = await prov.fn();
+      const raw = await aiWithRetry(prov.fn, (attempt,maxAttempts,delayMs)=>{
+        if(onProgress) onProgress(p, attempt, maxAttempts, delayMs);
+      });
       return { raw, provider:p };
     }catch(e){ errors.push(p+" : "+e.message); }
   }
@@ -12249,7 +12284,10 @@ async function generateMenuIA(){
 
   try{
     const { system, user } = buildMenuiaPrompt(c, { days, foodScope, variety, instructions });
-    const { raw, provider } = await callAI(system, user);
+    const { raw, provider } = await callAI(system, user, (p,attempt,maxAttempts,delayMs)=>{
+      const lbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[p]||p;
+      loadingEl.textContent = `⏳ ${lbl} est surchargé — nouvelle tentative ${attempt+1}/${maxAttempts} dans ${Math.round(delayMs/1000)}s...`;
+    });
     const parsed = aiParseJson(raw);
     if(!parsed || !Array.isArray(parsed.days) || !parsed.days.length){
       throw new Error("La réponse IA ne contient pas de plan alimentaire exploitable.");
@@ -12645,7 +12683,10 @@ async function runProgrammeAI(dayIndices, opts){
   statusEl.textContent = "⏳ Génération du programme via IA (10-30s)...";
 
   try{
-    const { raw, provider } = await callAI(system, user);
+    const { raw, provider } = await callAI(system, user, (p,attempt,maxAttempts,delayMs)=>{
+      const lbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[p]||p;
+      statusEl.textContent = `⏳ ${lbl} est surchargé — nouvelle tentative ${attempt+1}/${maxAttempts} dans ${Math.round(delayMs/1000)}s...`;
+    });
     const parsed = aiParseJson(raw);
     if(!parsed || !Array.isArray(parsed.days) || !parsed.days.length){
       throw new Error("La réponse IA ne contient pas de programme exploitable.");
@@ -12868,7 +12909,10 @@ async function generateJourneeTypeAI(){
 
   try{
     const { system, user, mealsInfo } = buildJourneeTypeAIPrompt(c, {});
-    const { raw, provider } = await callAI(system, user);
+    const { raw, provider } = await callAI(system, user, (p,attempt,maxAttempts,delayMs)=>{
+      const lbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[p]||p;
+      statusEl.textContent = `⏳ ${lbl} est surchargé — nouvelle tentative ${attempt+1}/${maxAttempts} dans ${Math.round(delayMs/1000)}s...`;
+    });
     const parsed = aiParseJson(raw);
     if(!parsed || !Array.isArray(parsed.meals)) throw new Error("Réponse IA inexploitable.");
 
@@ -13318,7 +13362,10 @@ async function sendProgramChat(){
   try{
     const history = aiChatHistoryForPrompt(c.aiChatProgram.slice(0,-1));
     const { system, user } = buildProgramChatPrompt(c, history, msg);
-    const { raw } = await callAI(system, user);
+    const { raw } = await callAI(system, user, (p,attempt,maxAttempts,delayMs)=>{
+      const lbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[p]||p;
+      loadingEl.textContent = `⏳ ${lbl} est surchargé — nouvelle tentative ${attempt+1}/${maxAttempts} dans ${Math.round(delayMs/1000)}s...`;
+    });
     const parsed = aiParseJson(raw);
     if(!parsed || typeof parsed.reply!=="string") throw new Error("Réponse IA inexploitable.");
 
@@ -13442,7 +13489,10 @@ async function sendJourneeChat(){
   try{
     const history = aiChatHistoryForPrompt(c.aiChatJournee.slice(0,-1));
     const { system, user, mealsInfo } = buildJourneeChatPrompt(c, history, msg);
-    const { raw } = await callAI(system, user);
+    const { raw } = await callAI(system, user, (p,attempt,maxAttempts,delayMs)=>{
+      const lbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[p]||p;
+      loadingEl.textContent = `⏳ ${lbl} est surchargé — nouvelle tentative ${attempt+1}/${maxAttempts} dans ${Math.round(delayMs/1000)}s...`;
+    });
     const parsed = aiParseJson(raw);
     if(!parsed || typeof parsed.reply!=="string") throw new Error("Réponse IA inexploitable.");
 
