@@ -764,9 +764,13 @@ tailwind.config = {
             <div class="day-seg-wrap"><div class="seg" id="daySeg" style="flex-wrap:nowrap;"></div></div>
             <div class="flex gap-2 flex-wrap">
               <!-- Option : même repas soir/midi lendemain -->
-              <label class="flex items-center gap-1.5 text-xs cursor-pointer" title="Le dîner sera copié au déjeuner du lendemain (pratique pour les couples et la meal prep)">
+              <label class="flex items-center gap-1.5 text-xs cursor-pointer" title="Les glucides (féculents) et les légumes du dîner sont repris au déjeuner du lendemain — la protéine peut différer (meal prep : on cuisine pour le soir ET le lendemain midi)">
                 <input type="checkbox" id="ckDinerEgalDej" class="accent-sage-600">
                 <span style="color:#5b7d6a;">Dîner = déjeuner lendemain</span>
+              </label>
+              <label class="flex items-center gap-1.5 text-xs cursor-pointer" title="À chaque déjeuner, la protéine est une conserve de poisson (sardines, thon...) choisie parmi les aliments aimés du client">
+                <input type="checkbox" id="ckDejeunerConserve" class="accent-sage-600">
+                <span style="color:#5b7d6a;">Déjeuner : conserve de poisson</span>
               </label>
               <button id="btnGenWeek" class="btn btn-ghost text-[.82rem]">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>
@@ -2885,6 +2889,7 @@ function freshClient(){
     options: {           // options de génération
       noFeculentSoir: false,   // pas de féculent au dîner
       dinerEgalDejeuner: false, // copier le dîner au déjeuner du lendemain
+      dejeunerConserve: false,  // déjeuner : protéine = poisson en conserve (sardines/thon...)
       supplements: [],         // [foodId] compléments actifs du client
     },
     // coefficients de calcul auto (g/kg), modifiables ; null = utiliser DEFAULT_COEFFS selon objectif
@@ -4416,6 +4421,8 @@ function renderProgram(){
   const c0=client();
   const ckDED = document.getElementById("ckDinerEgalDej");
   if(ckDED && c0) ckDED.checked = !!(c0.options&&c0.options.dinerEgalDejeuner);
+  const ckDC = document.getElementById("ckDejeunerConserve");
+  if(ckDC && c0) ckDC.checked = !!(c0.options&&c0.options.dejeunerConserve);
   const c=client();
   const empty=document.getElementById("progEmpty"), body=document.getElementById("progBody");
   if(!c){ empty.classList.remove("hidden"); body.classList.add("hidden"); return; }
@@ -8991,6 +8998,15 @@ function init(){
       ? "✓ Dîner = déjeuner lendemain activé — sera appliqué à la prochaine génération"
       : "Dîner = déjeuner lendemain désactivé");
   });
+  document.getElementById("ckDejeunerConserve")?.addEventListener("change", e=>{
+    const c=client(); if(!c) return;
+    if(!c.options) c.options={};
+    c.options.dejeunerConserve = e.target.checked;
+    save();
+    toast(e.target.checked
+      ? "✓ Déjeuner : conserve de poisson activé — appliqué à la prochaine génération IA"
+      : "Déjeuner : conserve de poisson désactivé");
+  });
   document.getElementById("btnDoSaveWeek")?.addEventListener("click", doSaveWeek);
   document.getElementById("btnDoImportProgram")?.addEventListener("click", doImportProgram);
   document.getElementById("btnDoImportJournee")?.addEventListener("click", doImportJourneeType);
@@ -12623,6 +12639,15 @@ function buildProgrammeAIPrompt(c, dayIndices, opts){
     };
   }).filter(Boolean);
 
+  // Consignes d'habitude du coach (aussi garanties en code après coup, cf. progApplyHabitRules)
+  let habitRules = "";
+  if(c.options && c.options.dinerEgalDejeuner){
+    habitRules += `\n9. RÈGLE MEAL PREP (obligatoire) : le DÎNER d'un jour et le DÉJEUNER du jour suivant (le dîner du dimanche → le déjeuner du lundi) doivent contenir EXACTEMENT les mêmes féculents et les mêmes légumes (même aliment, même id) — on cuisine une fois pour le soir et le lendemain midi. Seules les quantités (adaptées à la cible de chaque repas) et la protéine peuvent différer. Ne mets donc jamais des pommes de terre au dîner et des pâtes le lendemain midi.`;
+  }
+  if(c.options && c.options.dejeunerConserve){
+    habitRules += `\n10. RÈGLE DÉJEUNER (obligatoire) : la protéine de CHAQUE déjeuner est une conserve de poisson (sardines, thon, maquereau...) choisie dans la liste d'aliments disponibles — alterne d'un jour à l'autre si plusieurs existent.`;
+  }
+
   const system = `Tu es un(e) diététicien(ne)-nutritionniste expert(e), assistant(e) d'un coach sportif francophone. Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte ni markdown autour. Respecte STRICTEMENT le schéma demandé.
 
 RÈGLES ABSOLUES :
@@ -12633,7 +12658,7 @@ RÈGLES ABSOLUES :
 5. Grammages réalistes, arrondis à 5g près.
 6. Tu n'as PAS besoin de calculer kcal/macros par aliment : l'application les recalcule elle-même depuis sa base de données à partir de l'id et du grammage. Renvoie uniquement "foodId" et "grammes".
 7. Compose des repas RÉALISTES à la française, pas juste le minimum pour atteindre les macros. Pour un déjeuner ou un dîner, pense structure complète : protéine + légume + féculent + matière grasse, ET termine par un laitage (yaourt, fromage blanc) ou un fruit/compote quand la liste d'aliments disponibles en propose et que le budget calorique le permet — n'omets pas ces aliments simplement parce qu'ils ne sont pas indispensables pour atteindre la cible. Varie aussi les choix d'un repas à l'autre plutôt que de répéter toujours les mêmes aliments.
-8. Cohérence culinaire obligatoire : vérifie que chaque combinaison est réellement mangeable telle quelle, pas juste calculable en macros. En particulier, des flocons d'avoine/céréales/muesli SECS ne se mangent jamais seuls — associe-les systématiquement à un support liquide ou laitier adapté (yaourt nature, fromage blanc, lait, skyr, boisson végétale...) disponible dans la liste. Plus généralement, ne laisse jamais un aliment qui a normalement besoin d'un accompagnement (céréales, pâtes/riz nature sans rien, etc.) "orphelin" dans le repas.`;
+8. Cohérence culinaire obligatoire : vérifie que chaque combinaison est réellement mangeable telle quelle, pas juste calculable en macros. En particulier, des flocons d'avoine/céréales/muesli SECS ne se mangent jamais seuls — associe-les systématiquement à un support liquide ou laitier adapté (yaourt nature, fromage blanc, lait, skyr, boisson végétale...) disponible dans la liste. Plus généralement, ne laisse jamais un aliment qui a normalement besoin d'un accompagnement (céréales, pâtes/riz nature sans rien, etc.) "orphelin" dans le repas.${habitRules}`;
 
   const userMsg = `Génère le contenu des repas manquants pour ce client, jour par jour.
 
@@ -12660,6 +12685,131 @@ Réponds avec UNIQUEMENT ce JSON :
 }`;
 
   return { system, user: userMsg, daysInfo };
+}
+
+/* =========================================================
+   RÈGLES D'HABITUDE DU COACH — appliquées APRÈS la génération IA.
+   On ne se contente pas de demander à l'IA de les respecter (elle les rate
+   parfois) : on les garantit en code, de façon déterministe.
+   - « Dîner = déjeuner lendemain » : mêmes féculents + mêmes légumes
+     (la protéine peut différer). Le dîner fait foi, le déjeuner suit.
+   - « Déjeuner : conserve de poisson » : la protéine du déjeuner est
+     une conserve (sardines, thon...) parmi les aliments aimés du client.
+   ========================================================= */
+function progItemRole(it){
+  if(!it) return "autre";
+  const r = foodRole({cat: it.cat||"", prot: it.base&&it.base.prot, gluc: it.base&&it.base.gluc});
+  if(r!=="autre") return r;
+  // catégorie générique "Protéines" (ex: œufs) non reconnue par foodRole
+  if(noAccent(it.cat||"").includes("proteine")) return "proteine";
+  return r;
+}
+
+function progIsCannedFishName(name){
+  return /sardine|thon|maquereau|anchois|conserve|boite/.test(noAccent(name||""));
+}
+
+function progCannedFishPool(c){
+  const liked = new Set((c.prefs&&c.prefs.liked)||[]);
+  const excluded = new Set((c.prefs&&c.prefs.excluded)||[]);
+  return DB.foods.filter(f=>{
+    if(!f || !liked.has(f.id) || excluded.has(f.id)) return false;
+    if(!progIsCannedFishName(f.name)) return false;
+    const role = progItemRole({cat:f.cat, base:{prot:f.prot, gluc:f.gluc}});
+    return role==="proteine";
+  });
+}
+
+/* touched : Set de "jour:repas" (ex "2:diner") régénérés dans ce tour.
+   Retourne { aligned, canned } pour le message de statut. */
+function progApplyHabitRules(c, touched){
+  const out = { aligned:0, canned:0, noCannedAvailable:false };
+  const opts = c.options || {};
+  const lockedMeal = (d, mealId)=>{
+    const arr = (c.program[d] && c.program[d][mealId]) || [];
+    return arr.some(it=>it && it._locked) || !!(c.program[d] && c.program[d][mealId] && c.program[d][mealId]._mealLocked);
+  };
+  const round5 = g => Math.max(5, Math.round(g/5)*5);
+
+  // 1) Dîner(J) → mêmes féculents et légumes au déjeuner(J+1) (retour dimanche → lundi, comme l'algorithme classique)
+  if(opts.dinerEgalDejeuner){
+    for(let d=0; d<7; d++){
+      const nd = (d+1)%7;
+      if(!touched.has(d+":diner") && !touched.has(nd+":dejeuner")) continue;
+      if(lockedMeal(nd,"dejeuner")) continue;
+      const dinner = ((c.program[d]&&c.program[d].diner)||[]).filter(it=>it&&it.base);
+      const lunch  = (c.program[nd] && c.program[nd].dejeuner) || [];
+      if(!dinner.length || !lunch.length) continue;
+
+      let changed = false;
+      ["feculent","legume"].forEach(role=>{
+        const srcItems  = dinner.filter(it=>progItemRole(it)===role);
+        const lunchIdx  = [];
+        lunch.forEach((it,i)=>{ if(it && it.base && progItemRole(it)===role) lunchIdx.push(i); });
+        const n = Math.min(srcItems.length, lunchIdx.length);
+        for(let k=0; k<n; k++){
+          const src = srcItems[k];
+          const li  = lunchIdx[k];
+          const cur = lunch[li];
+          if(cur.foodId && src.foodId && cur.foodId===src.foodId) continue; // déjà identique
+          if(!cur.foodId && (cur.name||"")===(src.name||"")) continue;
+          let grams = cur.grams;
+          if(role==="feculent"){
+            // on conserve les calories prévues pour ce féculent au déjeuner
+            const kcalWanted = itemMacros(cur).kcal;
+            const per100 = n0(src.base.kcal);
+            grams = per100>0 ? Math.min(500, Math.max(30, round5(kcalWanted/(per100/100)))) : src.grams;
+          }
+          lunch[li] = { ...JSON.parse(JSON.stringify(src)), grams, _generated:true, _locked:false };
+          changed = true;
+        }
+      });
+      if(changed){ c.program[nd].dejeuner = lunch; out.aligned++; }
+    }
+  }
+
+  // 2) Déjeuner : protéine = conserve de poisson
+  if(opts.dejeunerConserve){
+    const pool = progCannedFishPool(c);
+    if(!pool.length){
+      out.noCannedAvailable = true;
+    } else {
+      for(let d=0; d<7; d++){
+        if(!touched.has(d+":dejeuner")) continue;
+        if(lockedMeal(d,"dejeuner")) continue;
+        const lunch = (c.program[d] && c.program[d].dejeuner) || [];
+        if(!lunch.length) continue;
+        const protIdx = [];
+        lunch.forEach((it,i)=>{ if(it && it.base && progItemRole(it)==="proteine") protIdx.push(i); });
+        if(!protIdx.length) continue;
+        if(protIdx.every(i=>progIsCannedFishName(lunch[i].name))) continue; // déjà une conserve
+
+        // protéines (g) à conserver = celles des protéines remplacées
+        const protWanted = protIdx.reduce((sum,i)=>sum+itemMacros(lunch[i]).prot, 0);
+        const food = pool[d % pool.length]; // alterne sardines / thon... selon les jours
+        const per100 = n0(food.prot);
+        const uw = food.unitWeight || getUnitWeight(food.name) || null;
+        let grams = per100>0 ? protWanted/(per100/100) : 120;
+        if(uw) grams = Math.max(0.5, Math.round(grams/uw*2)/2) * uw;
+        else   grams = round5(grams);
+        grams = Math.min(300, Math.max(50, Math.round(grams)));
+
+        const newItem = {
+          foodId:food.id, name:food.name, cat:food.cat, grams, unitWeight:uw,
+          base:{ kcal:n0(food.kcal), prot:n0(food.prot), gluc:n0(food.gluc), lip:n0(food.lip) },
+          _generated:true, _locked:false
+        };
+        const first = protIdx[0];
+        const kept = lunch.filter((it,i)=>!protIdx.includes(i));
+        // on réinsère à la place de la 1re protéine remplacée
+        const insertAt = lunch.slice(0,first).filter((it,i)=>!protIdx.includes(i)).length;
+        kept.splice(insertAt, 0, newItem);
+        c.program[d].dejeuner = kept;
+        out.canned++;
+      }
+    }
+  }
+  return out;
 }
 
 async function runProgrammeAI(dayIndices, opts){
@@ -12695,6 +12845,7 @@ async function runProgrammeAI(dayIndices, opts){
     pushUndo(dayIndices.length>1 ? "Génération semaine (IA)" : "Génération jour (IA)");
 
     let itemsApplied=0, itemsSkipped=0;
+    const touched = new Set(); // "jour:repas" réellement régénérés dans ce tour
     parsed.days.forEach(pd=>{
       const d = Number(pd.day_index);
       const info = daysInfo.find(di=>di.day_index===d);
@@ -12716,15 +12867,22 @@ async function runProgrammeAI(dayIndices, opts){
           };
         }).filter(Boolean);
         c.program[d][mealId] = items;
+        touched.add(d+":"+mealId);
       });
     });
+
+    // Règles d'habitude (Dîner = déjeuner lendemain, déjeuner en conserve de poisson)
+    const habit = progApplyHabitRules(c, touched);
 
     save();
     renderProgram(); renderRemaining();
 
     const provLbl = ({claude:"Claude",gemini:"Gemini",openai:"GPT"})[provider]||provider;
     statusEl.style.background = "#eef3ef"; statusEl.style.color = "#37503f";
-    statusEl.textContent = `✓ Programme généré via ${provLbl} · ${itemsApplied} aliment(s) placé(s)${itemsSkipped?` · ${itemsSkipped} ignoré(s) (non reconnus)`:""}`;
+    statusEl.textContent = `✓ Programme généré via ${provLbl} · ${itemsApplied} aliment(s) placé(s)${itemsSkipped?` · ${itemsSkipped} ignoré(s) (non reconnus)`:""}`
+      + (habit.aligned ? ` · ${habit.aligned} déjeuner(s) aligné(s) sur le dîner de la veille` : "")
+      + (habit.canned ? ` · ${habit.canned} déjeuner(s) en conserve de poisson` : "")
+      + (habit.noCannedAvailable ? ` · ⚠ aucune conserve de poisson (sardines, thon...) dans les aliments aimés — règle non appliquée` : "");
     toast("✓ Programme IA appliqué — modifiable normalement");
     return { itemsApplied, itemsSkipped, daysCount: daysInfo.length, provider };
   }catch(e){
